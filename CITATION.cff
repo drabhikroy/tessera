@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+title: "Tessera: every person a tile; together they show the pattern"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: Roy
+    given-names: Abhik
+    orcid: "https://orcid.org/0000-0002-7085-8964"
+repository-code: "https://github.com/drabhikroy/tessera"
+abstract: >-
+  An open source R Shiny application for social network analysis.
+  Classical, transparent graph methods turn a list of ties between people
+  into an interactive map, with plain language readings for general users
+  and full statistics for researchers, including extended centralities,
+  a choice of community detection algorithms, global diagnostics, and the
+  dyad and triad census. An optional language model running on the same
+  machine adds interpretation without changing any number.
+keywords:
+  - social network analysis
+  - graph theory
+  - community detection
+  - centrality
+  - R
+  - Shiny
+  - program evaluation
+license: PolyForm-Noncommercial-1.0.0
+version: 0.13.0
+date-released: "2026-07-23"

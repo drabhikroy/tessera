@@ -1,0 +1,1040 @@
+/* styles.css
+   The chrome stays close to monochrome slate so the network map is the
+   only strong color on screen. Two theme modes and four color palettes
+   combine into eight states; every text token below was checked against
+   its background at 4.5 to 1 or better, and group identity never rides
+   on color alone because shape carries it too. */
+
+:root,
+[data-bs-theme="dark"] {
+  --bg: #0f1317;
+  --surface: #171d24;
+  --raised: #202a34;
+  --line: #33404d;
+  --text: #e9eef3;
+  --muted: #a7b4c1;
+  --accent: #8fc1de;
+  --edge: #55636f;
+  --halo: #0f1317;
+  --focus: #ffd166;
+
+  /* Group colors, Okabe and Ito set. Group nine is the shared bucket for
+     anything past the eighth group. */
+  --g1: #e69f00; --g2: #56b4e9; --g3: #009e73; --g4: #f0e442;
+  --g5: #4d9fdc; --g6: #d55e00; --g7: #cc79a7; --g8: #bdbdbd;
+  --g9: #7a8794; --g10: #8fd6c4; --g11: #b48ade; --g12: #a67c52;
+
+  --font-body: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-data: "SF Mono", "Menlo", "Consolas", monospace;
+}
+
+[data-bs-theme="light"] {
+  --bg: #f2f4f6;
+  --surface: #ffffff;
+  --raised: #ffffff;
+  --line: #cdd6de;
+  --text: #17222d;
+  --muted: #465562;
+  --accent: #10577e;
+  --edge: #5f7182;
+  --halo: #ffffff;
+  --focus: #b3540b;
+  --g5: #0072b2; --g8: #6f6f6f; --g10: #2b8f7a; --g11: #7b4fa8;
+  --g12: #7a5232;
+}
+
+/* Palette tuned for deuteranopia and protanopia. Red against green is
+   never the distinction; blue, orange, yellow, and purple do the work,
+   with lightness steps as backup. */
+body.cb-deutan {
+  --g1: #e69f00; --g2: #56b4e9; --g3: #f0e442; --g4: #4d7ac9;
+  --g5: #b48ade; --g6: #9c6a00; --g7: #cfe0f2; --g8: #8a8a8a;
+  --g9: #6b6b6b; --g10: #2f4b7c; --g11: #d9c37a; --g12: #5c4b8a;
+}
+[data-bs-theme="light"] .cb-deutan,
+[data-bs-theme="light"].cb-deutan {
+  --g4: #0b4f8f; --g7: #274b66; --g8: #6f6f6f;
+}
+
+/* Palette tuned for tritanopia. Blue against green and yellow against
+   pink are avoided; reds, pinks, and teals separated by lightness. */
+body.cb-tritan {
+  --g1: #e4643b; --g2: #7fd4c1; --g3: #f2a0ac; --g4: #9e1b32;
+  --g5: #146b5c; --g6: #f5cfc0; --g7: #8f8f8f; --g8: #e0e0e0;
+  --g9: #5c5c5c; --g10: #b03050; --g11: #3fa08c; --g12: #d98a76;
+}
+[data-bs-theme="light"] .cb-tritan,
+[data-bs-theme="light"].cb-tritan {
+  --g2: #0e6f5c; --g6: #7a3216; --g8: #4a4a4a;
+}
+
+/* Monochrome high contrast. Grays step widely and the shapes carry all
+   group identity. Text tokens push to the extremes. */
+body.cb-mono {
+  --text: #ffffff; --muted: #cfcfcf; --line: #5a5a5a;
+  --accent: #ffffff; --edge: #8c8c8c; --focus: #ffffff;
+  --g1: #f2f2f2; --g2: #c9c9c9; --g3: #a3a3a3; --g4: #7d7d7d;
+  --g5: #dedede; --g6: #b5b5b5; --g7: #909090; --g8: #6a6a6a;
+  --g9: #575757; --g10: #e6e6e6; --g11: #bcbcbc; --g12: #4a4a4a;
+}
+[data-bs-theme="light"] .cb-mono,
+[data-bs-theme="light"].cb-mono {
+  --text: #000000; --muted: #363636; --line: #767676;
+  --accent: #000000; --edge: #5f5f5f; --focus: #000000;
+  --g1: #1a1a1a; --g2: #454545; --g3: #6b6b6b; --g4: #8f8f8f;
+  --g5: #2e2e2e; --g6: #585858; --g7: #7d7d7d; --g8: #a1a1a1;
+  --g9: #b8b8b8; --g10: #0d0d0d; --g11: #383838; --g12: #949494;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+/* Header */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.header-actions { align-items: center; }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+}
+.brand-mark {
+  width: 34px;
+  height: 34px;
+}
+.brand-mark path { stroke: var(--accent); stroke-width: 1.6; }
+.brand-mark circle { fill: var(--accent); }
+
+.app-name {
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin: 0;
+  line-height: 1.15;
+}
+
+.app-tag {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin: 0;
+}
+
+.header-actions { display: flex; gap: 10px; }
+
+/* Controls */
+
+.control-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  padding: 14px 22px;
+  background: var(--bg);
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.control label {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+select, .btn, input[type="text"] {
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+}
+
+.btn {
+  cursor: pointer;
+  min-width: 44px;
+  font-weight: 600;
+}
+.btn:hover { background: var(--raised); }
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+body.cb-mono .btn-primary {
+  /* In high contrast the filled and outlined pair carries the meaning
+     that color carried before. */
+  background: var(--text);
+  color: var(--bg);
+  border: 2px solid var(--text);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Layout: map beside the reading panel, stacking on narrow screens. */
+
+.main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr);
+  gap: 22px;
+  padding: 22px 24px;
+}
+@media (max-width: 980px) {
+  .main-grid { grid-template-columns: 1fr; }
+}
+
+.map-panel {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  min-height: 560px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+#map-host { width: 100%; height: 100%; min-height: 540px; }
+
+#network-map {
+  width: 100%;
+  height: 100%;
+  min-height: 540px;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+#network-map:active { cursor: grabbing; }
+
+#network-map path[data-from] {
+  stroke: var(--edge);
+  opacity: 0.7;
+}
+[data-bs-theme="light"] #network-map path[data-from] { opacity: 0.85; }
+body.cb-mono #network-map path[data-from] { opacity: 0.85; }
+
+.node { cursor: pointer; }
+.node .mark {
+  stroke: var(--text);
+  stroke-width: 1.75;
+}
+.node.color-1 .mark { fill: var(--g1); }
+.node.color-2 .mark { fill: var(--g2); }
+.node.color-3 .mark { fill: var(--g3); }
+.node.color-4 .mark { fill: var(--g4); }
+.node.color-5 .mark { fill: var(--g5); }
+.node.color-6 .mark { fill: var(--g6); }
+.node.color-7 .mark { fill: var(--g7); }
+.node.color-8 .mark { fill: var(--g8); }
+.node.color-9 .mark { fill: var(--g9); }
+.node.color-10 .mark { fill: var(--g10); }
+.node.color-11 .mark { fill: var(--g11); }
+.node.color-12 .mark { fill: var(--g12); }
+
+/* Variant one is hollow: the hue moves to a thick outline so the glyph
+   reads as clearly different from its solid twin. Variant two keeps the
+   solid fill and adds a centered pip. */
+.node.var-1 .mark {
+  fill: none;
+  stroke-width: 4;
+}
+.node.var-1.color-1 .mark { stroke: var(--g1); }
+.node.var-1.color-2 .mark { stroke: var(--g2); }
+.node.var-1.color-3 .mark { stroke: var(--g3); }
+.node.var-1.color-4 .mark { stroke: var(--g4); }
+.node.var-1.color-5 .mark { stroke: var(--g5); }
+.node.var-1.color-6 .mark { stroke: var(--g6); }
+.node.var-1.color-7 .mark { stroke: var(--g7); }
+.node.var-1.color-8 .mark { stroke: var(--g8); }
+.node.var-1.color-9 .mark { stroke: var(--g9); }
+.node.var-1.color-10 .mark { stroke: var(--g10); }
+.node.var-1.color-11 .mark { stroke: var(--g11); }
+.node.var-1.color-12 .mark { stroke: var(--g12); }
+.node .pip {
+  fill: var(--halo);
+  stroke: var(--text);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.cut-ring {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.node-label {
+  fill: var(--text);
+  font-size: 17px;
+  font-family: var(--font-body);
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--halo);
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+/* The spotlight: everything past one step fades but stays in place, so
+   the reader keeps the whole map in view while studying one person. */
+.dim { opacity: 0.13; }
+.node.chosen .mark { stroke-width: 3.5; }
+.node:focus-visible { outline: none; }
+.node:focus-visible .mark {
+  stroke: var(--focus);
+  stroke-width: 4.5;
+}
+
+#network-map .node,
+#network-map path[data-from] {
+  transition: opacity 0.35s ease;
+}
+
+.node-label.hide { display: none; }
+
+.map-buttons {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  gap: 8px;
+}
+.map-buttons button {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+}
+.map-buttons button:hover { background: var(--raised); }
+
+#map-tooltip {
+  position: fixed;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 230px;
+  padding: 9px 12px;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13.5px;
+  pointer-events: none;
+  z-index: 40;
+}
+#map-tooltip.show { display: flex; }
+
+/* Reading panel */
+
+.reading-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 78vh;
+  overflow-y: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.reading-panel h2 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: 0.03em;
+}
+
+.reading-panel p {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.caveat {
+  color: var(--muted);
+  font-size: 13.5px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 10px 22px 0;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.legend-item svg { display: block; }
+
+/* People table, rendered by the app so every mode is under our control. */
+
+.people-wrap { padding: 6px 22px 30px; }
+
+.people-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.people-table th, .people-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  font-size: 14.5px;
+}
+.people-table th {
+  background: var(--raised);
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 12.5px;
+}
+.people-table td.num {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+.people-table tr:last-child td { border-bottom: none; }
+
+.section-title {
+  margin: 24px 22px 10px;
+  font-size: 17px;
+  letter-spacing: 0.03em;
+}
+
+.helper-note {
+  margin: 0 22px 12px;
+  color: var(--muted);
+  font-size: 14px;
+  max-width: 900px;
+}
+
+/* Modal restyle so Shiny dialogs match both modes. The btn-default class
+   is what Shiny gives modal buttons, so it is covered on purpose. */
+.modal-content {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.modal-header, .modal-footer { border-color: var(--line); }
+.modal-content .btn-default, .modal-content .btn {
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+  min-height: 44px;
+}
+.modal-content .btn-default:hover { background: var(--bg); }
+
+.shiny-input-container { margin-bottom: 0; }
+
+.btn-default, .shiny-download-link {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  min-height: 44px;
+  border-radius: 8px;
+  padding: 8px 14px;
+}
+.btn-default:hover, .shiny-download-link:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+.input-group .btn-file { min-height: 44px; }
+.progress { background: var(--raised); }
+.progress-bar { background: var(--accent); color: var(--bg); }
+
+.shiny-notification {
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.shiny-notification-error {
+  border-left: 5px solid var(--g6);
+}
+body.cb-mono .shiny-notification-error {
+  border-left: 5px double var(--text);
+}
+
+a { color: var(--accent); }
+
+/* Motion is an accent here, never a requirement. Anyone who asks the
+   system for less motion gets a still interface with nothing missing. */
+#network-map.enter .node { animation: settle 0.6s ease both; }
+@keyframes settle {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none; transition: none; }
+}
+
+@media print {
+  .app-header, .control-row, .map-buttons { display: none; }
+  body { background: #ffffff; color: #000000; }
+  .reading-panel, .people-table { border-color: #999999; }
+}
+
+
+/* The map panel is a flat surface. An earlier gradient washed out the
+   pale edge color in light mode; a solid ground keeps every tie
+   visible in both themes. */
+.map-panel {
+  background: var(--surface);
+}
+
+/* Legend chips are buttons now: choosing one lights that group. */
+.legend-item {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 8px 14px;
+  min-height: 44px;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-family: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.legend-item:hover { background: var(--raised); color: var(--text); }
+.legend-item.static { cursor: default; }
+.legend-item.static:hover { background: var(--surface); }
+.legend-count {
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Reading panel cards: one idea per card, numbers first, prose under. */
+.card {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.card h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.card p { margin: 8px 0 0; font-size: 14.5px; }
+.card.slim { display: flex; flex-direction: column; gap: 8px; }
+.card.slim label { font-size: 13.5px; color: var(--muted); }
+.muted-card p { color: var(--muted); }
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+.stat { display: flex; flex-direction: column; min-width: 64px; }
+.stat-value {
+  font-family: var(--font-data);
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.person-chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  min-height: 44px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.person-chip:hover { background: var(--bg); border-color: var(--accent); }
+
+.panel-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 2px;
+}
+.model-answer {
+  margin: 0;
+  font-size: 14.5px;
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+}
+
+/* Empty state fills the map panel until data arrives. */
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 30px;
+}
+.empty-state h2 { margin: 4px 0 0; font-size: 20px; }
+.empty-state p { max-width: 480px; margin: 6px 0 0; color: var(--muted); }
+.empty-actions { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; justify-content: center; }
+.caveat-line { font-size: 13px; }
+
+/* Walkthrough */
+.tour-modal .modal-body { text-align: center; }
+.vignette {
+  width: min(320px, 100%);
+  height: auto;
+  margin: 0 auto;
+  display: block;
+}
+.tour-title { font-size: 19px; margin: 10px 0 4px; }
+.tour-text {
+  max-width: 420px;
+  margin: 0 auto;
+  color: var(--muted);
+  font-size: 14.5px;
+}
+.tour-dots { display: flex; gap: 7px; justify-content: center; margin-top: 14px; }
+.tour-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--line);
+  display: inline-block;
+}
+.tour-dot.on { background: var(--accent); }
+
+/* Vignette parts inherit the live palette tokens. */
+.v-n1 { fill: var(--g1); stroke: var(--text); stroke-width: 1.4; }
+.v-n2 { fill: var(--g2); stroke: var(--text); stroke-width: 1.4; }
+.v-n3 { fill: var(--g3); stroke: var(--text); stroke-width: 1.4; }
+.v-lit { fill: var(--g1); stroke: var(--focus); stroke-width: 2.4; }
+.v-dim { fill: var(--g9); stroke: var(--muted); stroke-width: 1; opacity: 0.4; }
+.v-tie { stroke: var(--edge); opacity: 0.75; }
+.v-tie-dim { stroke: var(--edge); opacity: 0.22; }
+.v-tie-far { stroke: var(--edge); opacity: 0.75; stroke-dasharray: 5 4; }
+.v-halo { fill: none; stroke: var(--focus); stroke-width: 1.6; opacity: 0.65; }
+.v-ring { fill: none; stroke: var(--text); stroke-width: 1.6; stroke-dasharray: 4 3; }
+.v-card { fill: var(--surface); stroke: var(--line); }
+.v-code { fill: var(--text); font-family: var(--font-data); font-size: 13px; }
+.v-arrow { stroke: var(--accent); stroke-width: 2.4; }
+.v-house { fill: none; stroke: var(--accent); stroke-width: 2; }
+
+/* Settings swatches */
+.swatch-row { display: inline-flex; gap: 5px; margin-left: 10px; vertical-align: middle; }
+.swatch { display: inline-block; }
+.swatch circle, .swatch rect, .swatch path { stroke: var(--text); stroke-width: 1.2; }
+.swatch-name { vertical-align: middle; }
+.radio label { min-height: 44px; display: flex; align-items: center; }
+
+/* Local models guide */
+.models-modal h2 { margin-top: 0; font-size: 20px; }
+.models-modal h3 { font-size: 15px; margin: 18px 0 6px; letter-spacing: 0.03em; }
+.assure {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  padding: 4px 16px 12px;
+  margin: 12px 0;
+}
+.setup-steps { margin: 6px 0 0; padding-left: 22px; }
+.setup-steps li { margin-bottom: 8px; }
+.model-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.model-card {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.model-card h4 { margin: 0 0 6px; font-size: 15px; }
+.model-card ul { margin: 8px 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; }
+.model-card p { font-size: 13.5px; margin: 6px 0 0; }
+.pull-line {
+  display: inline-block;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: var(--font-data);
+  font-size: 12.5px;
+}
+.tradeoff { color: var(--muted); }
+code {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-family: var(--font-data);
+  font-size: 0.92em;
+  color: var(--text);
+}
+
+.btn-cluster { display: flex; gap: 10px; flex-wrap: wrap; }
+.control-row.tight { padding-top: 0; }
+.control-slider .irs { min-width: 160px; }
+
+
+/* The appearance toggle sits in the navbar and names the mode it will
+   switch to, which is clearer than naming the current one. */
+.theme-toggle {
+  min-height: 40px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--raised); }
+
+/* Control row breathes: consistent gaps, aligned baselines, and a soft
+   divider under it so the map area feels distinct from the controls. */
+.control-row {
+  gap: 18px 20px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--line);
+  align-items: flex-end;
+}
+.control label {
+  margin-bottom: 2px;
+}
+
+
+/* Tessera on bslib. The navbar is bslib's; these rules tune the brand
+   mark and the app name that sit in its title slot, and style the two
+   persona tabs' content. Colors all come from our tokens, which now
+   follow bslib's data-bs-theme so dark and light are handled natively. */
+.navbar .brand { display: flex; align-items: center; gap: 10px; }
+.navbar .brand-mark { width: 26px; height: 26px; }
+.navbar .brand-mark rect { fill: var(--accent); }
+.navbar .app-name {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+/* The researcher tab is a calm grid of cards. Each holds one family of
+   statistics, so the page reads as a methods section, not a wall. */
+.research-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  padding: 20px 24px 0;
+}
+.research-card { border-radius: 12px; }
+.research-card.full { margin: 18px 24px 0; }
+.research-empty {
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--muted);
+}
+.research-empty h2 { color: var(--text); }
+.census-head { margin: 12px 0 4px; font-size: 14px; }
+.table-scroll { max-height: 320px; overflow-y: auto; }
+.code-export {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-family: var(--font-data);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text);
+}
+.guard-note {
+  color: var(--muted);
+  font-size: 13.5px;
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+}
+
+/* Tables in the research tab inherit the theme rather than Bootstrap's
+   default light striping, which would break in dark mode. */
+.research-card table {
+  width: 100%;
+  color: var(--text);
+  font-size: 13.5px;
+}
+.research-card table th {
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-weight: 600;
+}
+.research-card table td {
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* ---- Page scrolling ----------------------------------------------
+   bslib's navbar page can pin its body to the viewport height, which
+   hides everything below the fold. These rules hand scrolling back to
+   the page so the people table and the research cards are reachable. */
+html, body { height: auto; overflow-y: auto; }
+.bslib-page-navbar,
+.bslib-page-navbar > .navbar + div,
+.tab-content,
+.tab-pane {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+body > .container-fluid { overflow: visible; }
+
+/* ---- Full screen map ----------------------------------------------
+   The map fills the viewport and the reading panel floats over its top
+   right corner. The panel can be made see through so the network under
+   it stays legible, and Escape or the button returns to the split view. */
+#fs-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  background: var(--bg);
+}
+.map-panel.fullscreen {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 0;
+  border: none;
+  min-height: 100vh;
+  box-shadow: none;
+}
+.map-panel.fullscreen #map-host,
+.map-panel.fullscreen #network-map {
+  height: 100vh;
+  min-height: 100vh;
+}
+body.map-fullscreen { overflow: hidden; }
+
+/* The floating panel only exists in full screen. It carries its own
+   scroll so a long card stack never runs off the bottom. */
+.floating-reading {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  width: min(380px, calc(100vw - 44px));
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  z-index: 1060;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+}
+/* See through mode. The blur keeps text readable over a busy network,
+   and the cards inside lose their own fill so only one layer tints. */
+.floating-reading.see-through {
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+}
+.floating-reading.see-through .card {
+  background: color-mix(in srgb, var(--raised) 45%, transparent);
+}
+/* Where color-mix is unsupported the panel stays solid, which is the
+   safe direction to fail. */
+@supports not (background: color-mix(in srgb, red 50%, transparent)) {
+  .floating-reading.see-through { background: var(--surface); }
+}
+
+.fs-controls {
+  position: fixed;
+  left: 22px;
+  top: 78px;
+  z-index: 1060;
+  display: flex;
+  gap: 10px;
+}
+.map-buttons { z-index: 1060; }
+
+.colophon {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin: 0;
+}
+.colophon a { color: var(--accent); }
+
+/* Shown only when the browser is holding an older stylesheet than the
+   markup, which otherwise presents as controls that do nothing. */
+#stale-css-warning {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 2000;
+  max-width: 560px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: #7a3216;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.5;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+
+/* ---- Navbar spacing -------------------------------------------------
+   The brand sat hard against the first tab, so the two read as one run
+   of text. A divider and generous space separate identity from
+   navigation. */
+.navbar .brand {
+  padding-right: 22px;
+  margin-right: 22px;
+  border-right: 1px solid var(--line);
+}
+.navbar .navbar-nav { gap: 6px; }
+.navbar .nav-link { padding-left: 14px; padding-right: 14px; }
+
+/* ---- Control row alignment -----------------------------------------
+   Each control is a label above an input. Shiny wraps file inputs and
+   selects in containers with their own margins, which pushed the two
+   apart so labels and fields no longer lined up. Fixing the label block
+   height and stripping the inherited margins puts every field on one
+   baseline regardless of which widget it is. */
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  justify-content: flex-start;
+}
+.control > label {
+  display: block;
+  min-height: 18px;
+  margin: 0 0 6px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.control .form-group,
+.control .shiny-input-container,
+.control .shiny-html-output {
+  margin: 0;
+  padding: 0;
+}
+.control .form-control,
+.control .form-select,
+.control select,
+.control .input-group {
+  margin: 0;
+  height: 44px;
+}
+/* Shiny renders a file input as a button beside a text field inside one
+   group; both halves need the same height as a plain select. */
+.control .input-group > .form-control,
+.control .input-group > .input-group-btn,
+.control .input-group > .btn-file,
+.control .input-group > label.btn {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+/* The progress bar a file input reserves space for would otherwise add
+   a stray gap under one control and not the others. */
+.control .progress {
+  display: none;
+  margin: 0;
+  height: 0;
+}
+.control-row { align-items: flex-start; }
+
+/* The see through control floats only while full screen is on. */
+.fs-floating {
+  position: fixed;
+  left: 22px;
+  top: 22px;
+  z-index: 1070;
+}
+
+/* Shown when full screen was asked for and did not happen, so the
+   failure explains itself instead of looking like a dead control. */
+#fs-trouble {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 620px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: #7a3216;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.5;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+#fs-trouble .btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: #ffffff;
+  white-space: nowrap;
+}

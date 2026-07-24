@@ -1,0 +1,46 @@
+# Publishes a release when a version tag is pushed. The notes are taken
+# from the matching section of NEWS.md, so the release page and the
+# repository always tell the same story, and a source archive is
+# attached for anyone citing or returning to a specific version.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Take the notes for this version from NEWS.md
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="# Tessera $VERSION" '
+            $0 == v {found = 1; next}
+            found && /^# Tessera / {exit}
+            found {print}
+          ' NEWS.md > /tmp/notes.md
+          if [ ! -s /tmp/notes.md ]; then
+            echo "No NEWS.md section found for $VERSION" > /tmp/notes.md
+          fi
+
+      - name: Build the source archive
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p /tmp/build
+          rsync -a --exclude ".git" --exclude "node_modules" \
+                --exclude "package-lock.json" --exclude "package.json" \
+                ./ "/tmp/build/tessera-$VERSION/"
+          (cd /tmp/build && zip -rq "tessera-$VERSION.zip" "tessera-$VERSION")
+          mv "/tmp/build/tessera-$VERSION.zip" .
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: /tmp/notes.md
+          files: tessera-*.zip

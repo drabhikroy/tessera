@@ -1,0 +1,28 @@
+Package: tessera
+Title: Social Network Analysis Dashboard
+Version: 0.13.0
+Authors@R: 
+    person("Abhik", "Roy", role = c("aut", "cre"))
+Description: A Shiny application for social network analysis. Turns an
+    edge list into an interactive map with a plain language reading
+    panel for general readers, and a research tier with extended
+    centralities, a choice of community detection algorithms, global
+    diagnostics, dyad and triad census, and reproducible script export.
+    All computation is local.
+License: file LICENSE.md
+Encoding: UTF-8
+Imports:
+    bslib,
+    dplyr,
+    ggplot2,
+    ggraph,
+    igraph,
+    jsonlite,
+    purrr,
+    readr,
+    shiny,
+    tibble,
+    tidygraph,
+    tidyr
+Suggests:
+    curl

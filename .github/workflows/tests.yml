@@ -1,0 +1,60 @@
+# Runs the three test suites on every push and pull request, so a change
+# that breaks the graph math, the renderer, or the appearance toggle is
+# caught before it reaches a release.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  suites:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::shiny
+            any::bslib
+            any::igraph
+            any::tidygraph
+            any::ggraph
+            any::ggplot2
+            any::dplyr
+            any::tidyr
+            any::purrr
+            any::tibble
+            any::readr
+            any::jsonlite
+
+      - name: Graph math, prose, contrast, and research tier
+        run: Rscript tests/run_tests.R
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install the browser test harness
+        run: npm install jsdom
+
+      - name: Map renderer under a simulated browser
+        run: node tests/dom_test.mjs
+
+      - name: Appearance toggle against the served page
+        run: |
+          Rscript -e 'shiny::runApp(".", port = 7823, launch.browser = FALSE)' &
+          for i in $(seq 1 20); do
+            sleep 3
+            if curl -sf -o /dev/null http://127.0.0.1:7823/; then break; fi
+          done
+          curl -s http://127.0.0.1:7823/ -o /tmp/page.html
+          curl -s http://127.0.0.1:7823/styles.css -o /tmp/styles.css
+          node tests/theme_test.mjs /tmp/page.html /tmp/styles.css
