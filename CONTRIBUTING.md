@@ -51,6 +51,19 @@ runs them on every push. Together they cover:
   node dragging with its ties, the spotlight, and full screen behavior.
 - **Live boot.** The app starts and serves its page.
 
+Before tagging a release, check that the release notes are ready:
+
+```sh
+sh tests/release_notes_test.sh
+```
+
+It confirms `.github/RELEASE_TEMPLATE.md` has no unfilled placeholder, names
+the version in `DESCRIPTION`, still has its overview, highlights,
+installation, and license sections, and that `NEWS.md` has a heading for that
+version. The release workflow builds the actual release page from these two
+files, and CI runs this check on every push so a broken template is caught
+long before a tag is pushed.
+
 Two further suites run against the page the server actually sends rather than
 a reconstruction of it. The appearance toggle:
 

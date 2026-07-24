@@ -1,7 +1,9 @@
-# Publishes a release when a version tag is pushed. The notes are taken
-# from the matching section of NEWS.md, so the release page and the
-# repository always tell the same story, and a source archive is
-# attached for anyone citing or returning to a specific version.
+# Publishes a release when a version tag is pushed. The notes combine a
+# stable overview, highlights, installation, and license from
+# RELEASE_TEMPLATE.md with the specific changes for that version from
+# NEWS.md, so a newcomer reading the release learns what the app is, and
+# a returning user can see what moved. A source archive is attached for
+# anyone citing or returning to a specific version.
 name: release
 
 on:
@@ -17,17 +19,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Take the notes for this version from NEWS.md
+      - name: Build the release notes
         id: notes
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+
+          # The overview, highlights, installation, and license stay
+          # stable across versions, so they live in their own file rather
+          # than being reconstructed from a changelog on every tag.
+          sed "s/{{VERSION}}/$VERSION/" .github/RELEASE_TEMPLATE.md \
+            > /tmp/notes.md
+
+          # What changed in this specific version comes from NEWS.md,
+          # appended under its own heading so a returning user can see
+          # both what the app is and what moved since they last looked.
           awk -v v="# Tessera $VERSION" '
             $0 == v {found = 1; next}
             found && /^# Tessera / {exit}
             found {print}
-          ' NEWS.md > /tmp/notes.md
-          if [ ! -s /tmp/notes.md ]; then
-            echo "No NEWS.md section found for $VERSION" > /tmp/notes.md
+          ' NEWS.md > /tmp/changes.md
+
+          if [ -s /tmp/changes.md ]; then
+            {
+              echo ""
+              echo "### Changes in this version"
+              echo ""
+              sed '/./,$!d' /tmp/changes.md
+            } >> /tmp/notes.md
           fi
 
       - name: Build the source archive

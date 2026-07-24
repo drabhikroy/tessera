@@ -58,3 +58,6 @@ jobs:
           curl -s http://127.0.0.1:7823/ -o /tmp/page.html
           curl -s http://127.0.0.1:7823/styles.css -o /tmp/styles.css
           node tests/theme_test.mjs /tmp/page.html /tmp/styles.css
+
+      - name: Release notes are ready for the current version
+        run: sh tests/release_notes_test.sh

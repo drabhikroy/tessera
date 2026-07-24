@@ -149,9 +149,10 @@ keyboard navigation and the palette work.
 ## Releases
 
 Version history is in `NEWS.md`. Pushing a version tag publishes a
-release automatically: the notes come from the matching section of
-`NEWS.md` and a source archive is attached, so a specific version can be
-cited or returned to.
+release automatically. The release page combines a stable overview,
+highlights, installation, and license from `.github/RELEASE_TEMPLATE.md`
+with that version's entry from `NEWS.md`, and a source archive is
+attached, so a specific version can be cited or returned to.
 
 ```sh
 git tag -a v0.11.0 -m "Tessera 0.11.0"

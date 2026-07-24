@@ -1,3 +1,18 @@
+# Tessera 0.14.0
+
+## Added
+
+- The first release page now has the same shape used across these
+  projects: an overview, highlights, installation instructions, and the
+  license, kept in `.github/RELEASE_TEMPLATE.md` so every future release
+  reads consistently rather than being reconstructed from a changelog. A
+  version's specific changes from `NEWS.md` still appear underneath, so
+  a returning user can see both what the app is and what moved.
+- A check, `tests/release_notes_test.sh`, that confirms the template has
+  no unfilled placeholder, names the current version, keeps its required
+  sections, and that `NEWS.md` has a matching heading. It runs in CI on
+  every push, so a broken template is caught long before a tag.
+
 # Tessera 0.13.0
 
 ## Fixed

@@ -24,7 +24,7 @@ source("R/research_metrics.R")
 
 APP_NAME    <- "Tessera"
 APP_TAG     <- "Every person a tile; together they show the pattern."
-APP_VERSION <- "0.13.0"
+APP_VERSION <- "0.14.0"
 
 # Build a cache busting suffix from the version and the file's own
 # modification time, so an edit during development is picked up without
