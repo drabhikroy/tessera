@@ -1004,12 +1004,47 @@ body.map-fullscreen { overflow: hidden; }
 }
 .control-row { align-items: flex-start; }
 
-/* The see through control floats only while full screen is on. */
-.fs-floating {
-  position: fixed;
-  left: 22px;
+/* The full screen control bar sits inside the overlay, top left, clear
+   of the reading panel in the opposite corner. Exit is the emphasized
+   one, since leaving is the action a person hunts for first. */
+.fs-bar {
+  position: absolute;
   top: 22px;
-  z-index: 1070;
+  left: 22px;
+  z-index: 3;
+  display: flex;
+  gap: 10px;
+}
+.fs-bar-btn {
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.fs-bar-btn:hover { background: var(--raised); }
+.fs-exit {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.fs-exit:hover {
+  background: var(--accent);
+  color: var(--bg);
+  filter: brightness(1.1);
+}
+/* In the high contrast palette the emphasis cannot rest on hue, so the
+   exit control takes a heavier border instead. */
+body.cb-mono .fs-exit {
+  background: var(--text);
+  color: var(--bg);
+  border: 2px solid var(--text);
 }
 
 /* Shown when full screen was asked for and did not happen, so the

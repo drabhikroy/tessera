@@ -1,3 +1,16 @@
+# Tessera 0.15.0
+
+## Fixed
+
+- Full screen had no visible way out. A native full screen element is
+  the only thing the browser paints, and both controls sat outside it,
+  the exit toggle in the control row and the see through button on the
+  document body, so both disappeared at the moment they were needed and
+  the Escape key was the only remaining route. Full screen now carries
+  its own control bar inside the overlay, with an emphasized Exit full
+  screen button beside the see through toggle. Escape still works and
+  the button says so.
+
 # Tessera 0.14.0
 
 ## Added

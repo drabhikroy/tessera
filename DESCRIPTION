@@ -1,6 +1,6 @@
 Package: tessera
 Title: Social Network Analysis Dashboard
-Version: 0.14.0
+Version: 0.15.0
 Authors@R: 
     person("Abhik", "Roy", role = c("aut", "cre"))
 Description: A Shiny application for social network analysis. Turns an

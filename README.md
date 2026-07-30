@@ -36,8 +36,9 @@ nothing.
 Nodes can be dragged and their ties follow. The view fits the network
 when it loads, and a full screen button gives the map the whole window
 with the reading panel floating over the top right corner, optionally
-see through so the network stays legible underneath. Escape leaves full
-screen.
+see through so the network stays legible underneath. A control bar in
+the opposite corner leaves full screen or switches the panel between
+solid and see through, and Escape leaves as well.
 
 Group identity uses twelve base shapes crossed with three fill variants
 (solid, hollow, and solid with a centered pip) across twelve colors. That

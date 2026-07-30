@@ -234,6 +234,18 @@ check("an overlay is attached directly to the body",
 check("both panels move into the overlay",
   mapPanel.parentElement === overlay &&
   readPanel.parentElement === overlay);
+// A native full screen element is the only thing the browser paints, so
+// a control outside the overlay is invisible precisely when it is
+// needed. Both must be descendants of the overlay itself.
+const exitBtn = window.document.getElementById("fs-exit");
+check("full screen offers a visible way out", !!exitBtn);
+check("the exit control sits inside the overlay",
+  !!exitBtn && !!exitBtn.closest("#fs-overlay"));
+const seeBtnIn = window.document.getElementById("fs-transparent");
+check("the see through control also sits inside the overlay",
+  !!seeBtnIn && !!seeBtnIn.closest("#fs-overlay"));
+check("the exit control names the keyboard route too",
+  !!exitBtn && /escape/i.test(exitBtn.getAttribute("aria-label")));
 check("the toggle reports its state for assistive technology",
   fsBtn.getAttribute("aria-pressed") === "true" &&
   fsBtn.textContent === "Exit full screen");
@@ -241,6 +253,15 @@ const seeBtn = window.document.getElementById("fs-transparent");
 seeBtn.dispatchEvent(new window.Event("click", { bubbles: true }));
 check("the floating panel can be made see through",
   window.document.querySelector(".reading-panel").classList.contains("see-through"));
+// The exit button leaves full screen, then it is restored for the
+// keyboard check that follows.
+window.document.getElementById("fs-exit")
+  .dispatchEvent(new window.Event("click", { bubbles: true }));
+check("the exit control leaves full screen",
+  !mapPanel.classList.contains("fullscreen") &&
+  !window.document.getElementById("fs-overlay"));
+
+fsBtn.dispatchEvent(new window.Event("click", { bubbles: true }));
 const esc = new window.Event("keydown", { bubbles: true });
 esc.key = "Escape";
 window.document.dispatchEvent(esc);

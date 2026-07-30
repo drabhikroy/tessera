@@ -725,7 +725,6 @@
     if (t) {
       t.textContent = seeThrough ? "Solid panel" : "See through panel";
       t.setAttribute("aria-pressed", seeThrough ? "true" : "false");
-      t.style.display = on ? "" : "none";
     }
   }
 
@@ -843,11 +842,10 @@
   function apply() {
     var p = panel(), r = reading();
     if (!p || !r) return;
-    buildSeeThroughButton();
-
     var nativeAvailable = false, nativeGranted = false;
     if (on && !overlayActive()) {
       enter(p, r);
+      buildOverlayControls();
       var req = requestNative(overlay);
       nativeAvailable = req !== null;
       if (req && typeof req.then === "function") {
@@ -901,20 +899,38 @@
   document.addEventListener("click", function (ev) {
     var hit = ev.target.closest("#fs-toggle");
     if (hit) { on = !on; apply(); return; }
+    if (ev.target.closest("#fs-exit")) { on = false; apply(); return; }
     var see = ev.target.closest("#fs-transparent");
     if (see) { seeThrough = !seeThrough; apply(); }
   });
 
-  /* The see through control only makes sense in full screen, so it is
-     created alongside the overlay and removed with it. */
-  function buildSeeThroughButton() {
-    if (document.getElementById("fs-transparent")) return;
-    var b = document.createElement("button");
-    b.id = "fs-transparent";
-    b.type = "button";
-    b.className = "btn fs-floating";
-    b.setAttribute("aria-pressed", "false");
-    document.body.appendChild(b);
+  /* Both full screen controls live inside the overlay, because a native
+     full screen element is the only thing the browser paints. A control
+     placed anywhere else is invisible at exactly the moment it is
+     needed, which left Escape as the only way out. */
+  function buildOverlayControls() {
+    if (!overlay || overlay.querySelector(".fs-bar")) return;
+    var bar = document.createElement("div");
+    bar.className = "fs-bar";
+
+    var see = document.createElement("button");
+    see.id = "fs-transparent";
+    see.type = "button";
+    see.className = "btn fs-bar-btn";
+    see.setAttribute("aria-pressed", "false");
+
+    var exit = document.createElement("button");
+    exit.id = "fs-exit";
+    exit.type = "button";
+    exit.className = "btn fs-bar-btn fs-exit";
+    exit.textContent = "Exit full screen";
+    exit.title = "Exit full screen (Escape)";
+    exit.setAttribute("aria-label",
+      "Exit full screen. The Escape key also works.");
+
+    bar.appendChild(see);
+    bar.appendChild(exit);
+    overlay.appendChild(bar);
   }
 
   /* Escape leaves full screen, which is what every full screen view
