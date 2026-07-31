@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="Tessera">
+  <!-- Same mark on a dark backing square, matching the app's navbar. -->
+  <rect x="0" y="0" width="24" height="24" rx="5" fill="#171d24"/>
+  <rect x="3" y="3" width="8" height="8" rx="1.5" fill="#8fc1de"/>
+  <rect x="13" y="3" width="8" height="8" rx="1.5" fill="#8fc1de" opacity="0.75"/>
+  <rect x="3" y="13" width="8" height="8" rx="1.5" fill="#8fc1de" opacity="0.75"/>
+  <rect x="13" y="13" width="8" height="8" rx="1.5" fill="#8fc1de" opacity="0.5"/>
+</svg>
