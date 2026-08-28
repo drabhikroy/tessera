@@ -1,12 +1,5 @@
 # Tessera
 
-## Every person a tile; together they show the pattern.
-
-![The Explore tab showing a customer referral network of forty people,
-with the reading panel describing its shape, its groups, the people who
-hold it together, and where it is
-fragile.](docs/screenshot-operator.png)
-
 Tessera is a social network analysis dashboard written in R and Shiny.
 It helps researchers and analysts explore patterns of relationships,
 such as who connects to whom, which groups form, and which people occupy
@@ -16,6 +9,11 @@ The app takes a list of connections between people, calculates common
 network measures, and explains what those measures mean in plain
 English. Everything runs on your computer. No account is required, no
 server is used, and no data leave your machine.
+
+![The Explore tab showing a customer referral network of forty people,
+with the reading panel describing its shape, its groups, the people who
+hold it together, and where it is
+fragile.](docs/screenshot-operator.png)
 
 ## How Tessera works
 
