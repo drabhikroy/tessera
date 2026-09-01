@@ -60,7 +60,7 @@ jobs:
           (cd /tmp/build && zip -rq "tessera-$VERSION.zip" "tessera-$VERSION")
           mv "/tmp/build/tessera-$VERSION.zip" .
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           body_path: /tmp/notes.md
           files: tessera-*.zip
