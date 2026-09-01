@@ -698,13 +698,22 @@
      whole drawing rather than the parts around one node. */
   function simFrame() {
     if (!state.sim) return;
-    var largest = state.sim.step();
+    state.sim.step();
     state.data.nodes.forEach(function (n, i) {
       n._x = state.sim.nodes[i].x;
       n._y = state.sim.nodes[i].y;
     });
     redrawAll();
-    if (largest < 0.05) {
+    /* atRest, not a speed check made here. A speed check made here
+       would be a second copy of the same question layout.js already
+       answers, and the two had drifted: this one stopped the moment a
+       single frame moved less than 0.05, which a still-warm simulation
+       passes through on almost every swing of an oscillation, so the
+       map could freeze mid-motion, one frame short of where it was
+       going to settle. layout.js reports atRest only once the driving
+       temperature has actually run out, which is the one signal here
+       that cannot be fooled by a quiet frame. */
+    if (state.sim.atRest) {
       /* It has stopped changing in any way a reader could see. The
          simulation stays in place so a drag can wake it, but no frames
          are spent on it. */

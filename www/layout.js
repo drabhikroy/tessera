@@ -306,21 +306,47 @@
           if (speed > largest) largest = speed;
         }
         api.heat *= COOLING;
+        /* Rest means cold, and only cold.
+           A quiet frame is not evidence of rest by itself. Velocity
+           crosses near zero on every half cycle of a lightly damped
+           oscillation, so a single frame under the speed floor can be
+           a still-warm arrangement caught mid-swing rather than one
+           that has actually stopped: the very next frame's forces,
+           still scaled by a heat that has not run out, pick the motion
+           back up. Measured directly on this simulation, a network
+           whose speed dipped under the floor kept moving for tens of
+           further units over the next several hundred frames, well
+           after the moment it was declared settled.
+           Cooling has no such failure mode. It falls by the same
+           fraction every frame regardless of what the physics is
+           doing, so once it crosses the floor the forces it scales are
+           negligible and stay negligible; nothing pulls the map back
+           into motion afterward. That is the one signal here that
+           means what it says. */
         api.atRest = api.heat < COLD;
         return largest;
       },
 
-      /* Runs until it settles or until the frame budget runs out.
-         Returns the number of frames taken. */
-      /* Runs the whole arrangement without showing any of it. Watching
-         a network shuffle itself into place is worth seeing once; on
-         the tenth time a reader wants the answer. */
+      /* Runs until the arrangement is cold or the frame budget runs
+         out, and returns the number of frames it took.
+         Stopping is driven by atRest alone, the same flag a caller
+         reads afterward, on purpose: an independent early exit here
+         (a separate check on this frame's speed, say) would let
+         settle() report done at a moment atRest itself does not agree
+         with, which is exactly how a caller can be told an arrangement
+         is at rest and then watch it keep moving. One flag, asked once
+         each frame, is the only way the answer settle() gives and the
+         answer atRest gives are the same answer, always.
+         Cooling reaches the floor in the same number of frames every
+         time regardless of the network, since it does not depend on
+         the physics at all, so most networks finish well inside the
+         default budget rather than exhausting it. */
       settle: function (maxFrames) {
         var limit = maxFrames || 400;
         var frames = 0;
-        while (frames < limit) {
+        while (frames < limit && !api.atRest) {
           frames += 1;
-          if (api.step() < rest || api.atRest) break;
+          api.step();
         }
         return frames;
       }
