@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE)
 [![Shiny](https://img.shields.io/badge/Shiny-R-276DC3?logo=r&logoColor=white)](#requirements)
-[![Release](https://img.shields.io/badge/release-v0.25.0-blue)](https://github.com/drabhikroy/tessera/releases/tag/v0.25.0)
+[![Release](https://img.shields.io/github/v/release/drabhikroy/tessera)](https://github.com/drabhikroy/tessera/releases/latest)
 
 Tessera is a social network analysis dashboard written in R and Shiny.
 It helps researchers and analysts explore patterns of relationships,
