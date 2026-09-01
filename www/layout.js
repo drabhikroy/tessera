@@ -306,7 +306,7 @@
           if (speed > largest) largest = speed;
         }
         api.heat *= COOLING;
-        api.atRest = api.heat < COLD || largest < rest;
+        api.atRest = api.heat < COLD;
         return largest;
       },
 
