@@ -41,6 +41,13 @@ build_graph <- function(edges, nodes = NULL) {
     filter(from != "", to != "", from != to)
   if (nrow(ed) == 0) stop("No usable ties were found in the file.")
 
+  # A directed copy is kept whenever the source says the ties have a
+  # direction. Every measure and the grouping run on the undirected
+  # graph, because that is what the prose in this app is about, and the
+  # directed copy exists for the dyad and triad census alone, which is
+  # the one place direction changes the answer rather than the wording.
+  directed_source <- isTRUE(attr(edges, "directed"))
+
   g <- as_tbl_graph(ed, directed = FALSE) |>
     # Parallel ties collapse into one tie whose weight is the sum.
     # Repeated contact reads naturally as a stronger relationship.
@@ -57,6 +64,16 @@ build_graph <- function(edges, nodes = NULL) {
     )
     g <- g |> left_join(given, by = "name")
   }
+
+  # The directed copy rides along on the graph rather than being
+  # returned beside it, so every existing caller keeps working and only
+  # the census has to know it exists.
+  if (directed_source) {
+    attr(g, "digraph") <- igraph::simplify(
+      igraph::graph_from_data_frame(as.data.frame(ed[, c("from", "to")]),
+                                    directed = TRUE),
+      remove.multiple = TRUE, remove.loops = TRUE)
+  }
   g
 }
 
@@ -64,6 +81,9 @@ build_graph <- function(edges, nodes = NULL) {
 # whole network numbers are read off the finished graph. Returning one
 # list keeps the server logic to a lookup rather than a recomputation.
 compute_metrics <- function(g) {
+  # Held before the pipeline below, since the verbs that follow rebuild
+  # the graph object and drop anything hanging off it.
+  digraph <- attr(g, "digraph")
   n <- igraph::gorder(g)
   if (n < 2) stop("The network needs at least two people.")
 
@@ -94,6 +114,9 @@ compute_metrics <- function(g) {
 
   list(
     graph        = scored,
+    # Present only when the source declared a direction. The census
+    # reads it; nothing else does.
+    digraph      = digraph,
     node_table   = nd,
     n            = n,
     m            = igraph::gsize(g),
@@ -117,11 +140,83 @@ compute_metrics <- function(g) {
 # Deterministic layout through ggraph. The seed matters: the same data
 # should land in the same picture every time, or people lose their sense
 # of place in the map. Coordinates come back scaled to the unit square.
+# The layout, in three passes rather than one.
+#
+# A plain force directed layout puts every node where the forces settle
+# and stops, which produces the picture people recognize from a default
+# graph plot: one dense knot in the middle, a few nodes flung wide, and
+# clusters that overlap because nothing in the model knows they are
+# clusters. Two corrections follow the force pass.
+#
+# The first pulls each community toward its own center of mass, so
+# groups the analysis already found end up as groups the eye can see.
+# This changes nothing about the numbers; the grouping is computed from
+# the ties and the layout is only being asked to agree with it.
+#
+# The second separates nodes that landed on top of one another. A force
+# layout has no notion of how large a node is going to be, so nodes that
+# are far apart in the model can still overlap on screen once they are
+# given a radius.
 compute_layout <- function(g, seed = 42) {
   set.seed(seed)
-  ggraph::create_layout(g, layout = "fr", weights = weight) |>
-    as_tibble() |>
-    select(x, y) |>
+  base <- ggraph::create_layout(g, layout = "fr", weights = weight) |>
+    as_tibble()
+
+  x <- base$x
+  y <- base$y
+  groups <- if ("group" %in% names(base)) as.integer(base$group) else NULL
+  if (is.null(groups)) groups <- rep(1L, length(x))
+
+  # Pass two: gather each group around its own center. A fifth of the
+  # way is enough to read as a group without collapsing it into a blob
+  # or hiding the ties that cross between groups.
+  pull <- 0.20
+  for (grp in unique(groups)) {
+    idx <- which(groups == grp)
+    if (length(idx) < 2) next
+    cx <- mean(x[idx])
+    cy <- mean(y[idx])
+    x[idx] <- x[idx] + (cx - x[idx]) * pull
+    y[idx] <- y[idx] + (cy - y[idx]) * pull
+  }
+
+  # Pass three: push apart anything closer than a node width. Ten
+  # rounds is enough to clear the overlaps a force layout leaves and few
+  # enough that the picture is still the one the forces produced.
+  span <- max(max(x) - min(x), max(y) - min(y), 1e-9)
+  floor_gap <- span * 0.035
+  n <- length(x)
+  if (n > 1) {
+    for (round in seq_len(10)) {
+      moved <- FALSE
+      for (i in seq_len(n - 1)) {
+        for (j in (i + 1):n) {
+          dx <- x[j] - x[i]
+          dy <- y[j] - y[i]
+          d <- sqrt(dx * dx + dy * dy)
+          if (d >= floor_gap) next
+          # Two nodes in exactly the same place have no direction to
+          # separate along, so one is nudged off the spot first.
+          if (d < 1e-9) {
+            dx <- stats::runif(1, -1, 1) * floor_gap
+            dy <- stats::runif(1, -1, 1) * floor_gap
+            d <- sqrt(dx * dx + dy * dy)
+          }
+          shift <- (floor_gap - d) / 2
+          ux <- dx / d
+          uy <- dy / d
+          x[i] <- x[i] - ux * shift
+          y[i] <- y[i] - uy * shift
+          x[j] <- x[j] + ux * shift
+          y[j] <- y[j] + uy * shift
+          moved <- TRUE
+        }
+      }
+      if (!moved) break
+    }
+  }
+
+  tibble(x = x, y = y) |>
     mutate(
       x = (x - min(x)) / max(max(x) - min(x), 1e-9),
       y = (y - min(y)) / max(max(y) - min(y), 1e-9)
@@ -133,6 +228,43 @@ compute_layout <- function(g, seed = 42) {
 # twelve colors, so thirty six groups stay visually distinct before any
 # repetition. Anything past that shares the final bucket, which is rare
 # enough in real data to be an honest simplification.
+# The shortest route between two people, if there is one. Returns the
+# people along it in order and the ties between them.
+#
+# This is the question people ask of a network diagram more than any
+# other, and it is the one a picture answers worst: with fifty people on
+# screen, tracing a path by eye is guesswork. The answer is exact and
+# the map can show it.
+shortest_route <- function(metrics, from_name, to_name) {
+  gi <- as.igraph(metrics$graph)
+  names_all <- metrics$names
+  a <- match(from_name, names_all)
+  b <- match(to_name, names_all)
+  if (is.na(a) || is.na(b)) {
+    return(list(ok = FALSE, message = "One of those names is not here."))
+  }
+  if (a == b) {
+    return(list(ok = FALSE, message = "Those are the same person."))
+  }
+  path <- suppressWarnings(
+    igraph::shortest_paths(gi, from = a, to = b, weights = NA,
+                           output = "vpath")$vpath[[1]])
+  ids <- as.integer(path)
+  if (length(ids) < 2) {
+    return(list(ok = FALSE, message = paste0(
+      from_name, " and ", to_name,
+      " are in separate pieces of this network, so no route connects",
+      " them.")))
+  }
+  # The ties along the route, as from and to pairs in the order walked.
+  steps <- lapply(seq_len(length(ids) - 1), function(i) {
+    list(from = ids[i], to = ids[i + 1])
+  })
+  list(ok = TRUE, ids = ids, steps = steps,
+       names = names_all[ids],
+       length = length(ids) - 1)
+}
+
 relabel_groups <- function(membership, cap = 36) {
   # Order groups by size, largest first, breaking ties by the original
   # group number. Ranking on size alone gave equally sized communities
@@ -168,9 +300,26 @@ graph_payload <- function(metrics, layout) {
     as_tibble() |>
     select(from, to, weight)
 
+  # Two properties of a tie that the map can show and the numbers
+  # cannot. A bridge is a tie whose removal would break the network into
+  # more pieces than before, so it is the only route between what sits
+  # on either side of it. A crossing tie joins two different groups.
+  #
+  # These are the ties Granovetter's argument is about: the ones that
+  # carry anything new into a cluster, and the ones a network loses
+  # first and misses most. They are worth marking because a reader
+  # cannot find them by looking, and no per person score points at them.
+  gi <- as.igraph(metrics$graph)
+  bridge_ids <- tryCatch(igraph::bridges(gi), error = function(e) integer(0))
+  ed$bridge <- seq_len(nrow(ed)) %in% as.integer(bridge_ids)
+  groups <- nd$group
+  ed$crossing <- groups[ed$from] != groups[ed$to]
+
   list(nodes = as.data.frame(nd), edges = as.data.frame(ed),
        meta = list(n = metrics$n, m = metrics$m,
-                   n_groups = n_distinct(nd$group)))
+                   n_groups = n_distinct(nd$group),
+                   n_bridges = sum(ed$bridge),
+                   n_crossing = sum(ed$crossing)))
 }
 
 # Shiny serializes data frames column wise on the websocket, which is not

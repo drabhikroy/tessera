@@ -1,0 +1,22 @@
+# Text files are normalized to LF in the repository and checked out with
+# whatever the platform uses, so a contributor on Windows does not turn
+# every line of a file into a change.
+* text=auto eol=lf
+
+# Shell scripts must keep LF even on a checkout that would otherwise
+# convert them, since a CRLF line ending makes an interpreter line
+# unusable.
+*.sh text eol=lf
+
+# Binary assets are left alone. Marking them stops Git from attempting a
+# line ending conversion and from offering a meaningless diff.
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+
+# The screenshot and the icons are the parts of the repository a reader
+# sees first, so they are marked as documentation rather than counted
+# toward the language statistics.
+docs/* linguist-documentation
+icons/* linguist-documentation

@@ -22,6 +22,29 @@ The curl package is needed only for the optional local model connection.
 
 ## Running the tests
 
+Two gates need nothing installed and finish in about a second. Run them
+first, because they fail on the things easiest to introduce by accident and
+hardest to catch by eye:
+
+```sh
+node tests/standards_test.mjs
+node tests/palette_test.mjs
+node tests/layout_test.mjs
+```
+
+The first is the house writing standard: no em or en dashes anywhere, no
+contractions, no word from the banned lexicon in comments, strings, or
+documentation, and comments making up at least fifteen percent of the lines
+that hold something in every source file. The lexicon and its exemptions for
+names the languages define, such as `text-align`, live in `standards/`.
+
+The second measures color. It reads `www/styles.css`, resolves all ten theme
+and palette states the way a browser would, and checks every token against
+WCAG 2.2 AA, every pair of group colors against a separation floor after the
+color vision simulation that palette is built for, and the exported figure's
+copy of the palettes against the stylesheet it mirrors. If you change a color,
+this is the check that says whether you may.
+
 ```r
 Rscript tests/run_tests.R
 ```
@@ -77,11 +100,7 @@ node tests/theme_test.mjs /tmp/page.html /tmp/styles.css
 And full screen, which needs the rendered control row alongside the page:
 
 ```sh
-Rscript -e 'testServer(shinyAppFile("app.R"), {
-  session$setInputs(dataset = "org", size_by = "degree",
-                    sort_by = "degree", label_mode = "key")
-  writeLines(as.character(output$view_controls$html), "/tmp/controls.html")
-})'
+Rscript tests/render_controls.R /tmp/controls.html
 curl -s http://127.0.0.1:7823/ -o /tmp/page.html
 curl -s "http://127.0.0.1:7823/graph.js" -o /tmp/graph.js
 node tests/fullscreen_test.mjs /tmp/page.html /tmp/graph.js /tmp/controls.html

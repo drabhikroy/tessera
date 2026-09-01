@@ -1,4 +1,9 @@
 // dom_test.mjs
+/* The renderer is exercised against a simulated browser rather than a
+   real one, so the suite runs anywhere Node runs and stays fast enough
+   to sit in front of every push. What it cannot check is paint, which
+   is why the appearance and full screen suites talk to a served page
+   instead. */
 // Loads the real renderer inside jsdom with a Shiny stub, feeds it the
 // same wire format the server sends, and asserts on the resulting SVG.
 // This is the test that would have caught the blank map: the renderer
@@ -41,6 +46,9 @@ global.document = window.document;
 
 const code = readFileSync("www/graph.js", "utf8");
 try {
+  // layout.js is loaded first in the page and first here, so the live
+  // layout control is exercised in the state a reader meets it in.
+  window.eval(readFileSync("www/layout.js", "utf8"));
   window.eval(code);
   window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
 } catch (err) {
@@ -205,7 +213,8 @@ check("variant two draws a centered pip",
 // Full screen: the toggle moves the map and reading panel into the
 // overlay layout, and Escape restores the split view.
 // The panels are nested the way the real app nests them, several
-// containers deep, because that nesting is what broke the overlay.
+// containers deep, since that nesting is what the overlay has to reach
+// through.
 const shell = window.document.createElement("div");
 shell.innerHTML =
   '<div class="tab-content"><div class="tab-pane">' +
@@ -323,6 +332,307 @@ check("every message handler takes exactly one argument",
   Object.values(probeHandlers).every((fn) => fn.length === 1));
 check("the handlers defined after the first clear one still register",
   !!probeHandlers["clear-selection"] && !!probeHandlers["clear-graph"]);
+
+// ---- Live layout ----------------------------------------------------
+// The map arrives with computed coordinates and a control that hands it
+// to the physics. What matters is that the control exists, that running
+// it moves the drawing, and that the way back puts every person exactly
+// where the server put them, since a reader who cannot undo an
+// experiment will not run one.
+handlers["graph-data"](payload);
+const liveSvg = window.document.getElementById("network-map");
+const liveButton = window.document.querySelector(".map-live");
+check("the map offers a live layout control", !!liveButton);
+check("the live layout control is offered for a small network",
+  !!liveButton && !liveButton.disabled);
+
+if (liveButton) {
+  const markOf = () => window.document
+    .querySelector('.node[data-id="1"] .mark');
+  const before = markOf().getAttribute("d") || markOf().getAttribute("cx");
+  // requestAnimationFrame runs straight through here, so one press is
+  // one frame rather than an unbounded loop.
+  let frames = 0;
+  window.requestAnimationFrame = (fn) => {
+    frames += 1;
+    if (frames < 4) fn();
+    return frames;
+  };
+  window.cancelAnimationFrame = () => {};
+  liveButton.dispatchEvent(new window.Event("click", { bubbles: true }));
+  check("starting the live layout moves the drawing",
+    (markOf().getAttribute("d") || markOf().getAttribute("cx")) !== before);
+  check("the control reports that it is running",
+    liveButton.getAttribute("aria-pressed") === "true");
+
+  // Pinning. A reader double presses a person to nail them down, and
+  // the map has to show which people are held.
+  const nodeOne = window.document.querySelector('.node[data-id="1"]');
+  nodeOne.dispatchEvent(new window.Event("dblclick", { bubbles: true }));
+  check("a double press pins a person", nodeOne.classList.contains("held"));
+  nodeOne.dispatchEvent(new window.Event("dblclick", { bubbles: true }));
+  check("a second double press releases them",
+    !nodeOne.classList.contains("held"));
+
+  // And the keyboard reaches it, since a control only the mouse can
+  // reach is not a control.
+  nodeOne.dispatchEvent(new window.KeyboardEvent("keydown",
+    { key: "p", bubbles: true }));
+  check("the keyboard can pin a person too",
+    nodeOne.classList.contains("held"));
+
+  const spreadButton = window.document.querySelector(".map-spread");
+  check("the map offers a spacing control", !!spreadButton);
+  if (spreadButton) {
+    const firstLabel = spreadButton.getAttribute("aria-label");
+    spreadButton.dispatchEvent(new window.Event("click", { bubbles: true }));
+    check("the spacing control names the setting it moved to",
+      spreadButton.getAttribute("aria-label") !== firstLabel &&
+      /Spacing:/.test(spreadButton.getAttribute("aria-label")));
+  }
+
+  const homeButton = window.document.querySelector(
+    '[aria-label="Back to the computed layout"]');
+  check("there is a way back to the computed layout", !!homeButton);
+  if (homeButton) {
+    homeButton.dispatchEvent(new window.Event("click", { bubbles: true }));
+    check("the way back restores the layout the server sent",
+      (markOf().getAttribute("d") || markOf().getAttribute("cx")) === before);
+    check("the control reports that it stopped",
+      liveButton.getAttribute("aria-pressed") === "false");
+    check("going back to the computed layout releases every pin",
+      !window.document.querySelector(".node.held"));
+  }
+}
+
+// ---- The table viewer -----------------------------------------------
+// The open control, the search box, the sortable headings, and the file
+// are all one script working on a copy of a table. The copy is what
+// makes this testable without a server: a table in the markup is all it
+// ever needs.
+const tableDom = new JSDOM(
+  '<body>' +
+  '<div data-table-block data-table-title="People">' +
+  '<button data-table-open="full" data-table-title="People">Open</button>' +
+  '<table data-table-name="preview"><thead><tr><th>Name</th>' +
+  '<th>Ties</th></tr></thead><tbody>' +
+  '<tr><td>Ada</td><td>9</td></tr></tbody></table>' +
+  '<table data-table-name="full"><thead><tr><th>Name</th><th>Ties</th>' +
+  '</tr></thead><tbody>' +
+  '<tr><td>Ada</td><td>9</td></tr>' +
+  '<tr><td>Bess</td><td>11</td></tr>' +
+  '<tr><td>Cyrus</td><td>2</td></tr>' +
+  '</tbody></table></div></body>',
+  { pretendToBeVisual: true, runScripts: "outside-only" });
+tableDom.window.eval(readFileSync("www/tables.js", "utf8"));
+const tw = tableDom.window;
+const tdoc = tw.document;
+
+tdoc.querySelector("[data-table-open]")
+  .dispatchEvent(new tw.Event("click", { bubbles: true }));
+const view = tdoc.querySelector(".table-view");
+check("the open control raises a table view", !!view);
+check("the control opens the named table, not the preview beside it",
+  !!view && view.querySelectorAll("tbody tr").length === 3);
+check("the table on the page is left as it was",
+  tdoc.querySelector('table[data-table-name="full"] tbody').rows.length === 3);
+
+if (view) {
+  // Searching filters, and the count says what was left.
+  const search = view.querySelector("input[type=search]");
+  search.value = "Bess";
+  search.dispatchEvent(new tw.Event("input", { bubbles: true }));
+  check("searching narrows the rows",
+    view.querySelectorAll("tbody tr").length === 1);
+  check("the count says how many rows were left",
+    view.querySelector(".table-view-count").textContent.indexOf("1 of 3") >= 0);
+  search.value = "";
+  search.dispatchEvent(new tw.Event("input", { bubbles: true }));
+
+  // A column of numbers sorts as numbers. Sorting it as text would put
+  // 11 above 9.
+  const numberHead = view.querySelectorAll("thead th")[1];
+  numberHead.dispatchEvent(new tw.Event("click", { bubbles: true }));
+  const order = Array.from(view.querySelectorAll("tbody tr"))
+    .map((row) => row.cells[1].textContent.trim());
+  check("a numeric column sorts largest first, not as text",
+    order.join(",") === "11,9,2");
+  check("the sorted heading says which way it is sorting",
+    numberHead.getAttribute("aria-sort") === "descending");
+
+  // The file carries what is on screen, headings included.
+  const csv = tw.TesseraTables.toCsv(
+    view.querySelector("table"),
+    Array.from(view.querySelectorAll("tbody tr")));
+  check("the file carries the headings and the rows",
+    csv.split("\n").length === 4 && csv.indexOf('"Name","Ties"') === 0);
+
+  // Escape closes it and puts the page back the way it was.
+  tdoc.dispatchEvent(new tw.KeyboardEvent("keydown",
+    { key: "Escape", bubbles: true }));
+  check("escape closes the table view",
+    !tdoc.querySelector(".table-view"));
+}
+
+check("a column of numbers is recognized as numbers", (() => {
+  const rows = Array.from(
+    tdoc.querySelectorAll('table[data-table-name="full"] tbody tr'));
+  return tw.TesseraTables.columnIsNumeric(rows, 1) &&
+    !tw.TesseraTables.columnIsNumeric(rows, 0);
+})());
+
+// A share column carries a percent sign and is still a number, or a
+// table of shares sorts with nine percent above ten.
+check("a percent is read as a number",
+  tw.TesseraTables.cellNumber({ textContent: "73.1%" }) === 73.1);
+
+// ---- Opening a whole card ------------------------------------------
+// A research card is held to one height with the rest of it behind the
+// control in its heading. The copy the control opens has to swap the
+// shortened table for the whole one, so a card showing four of sixteen
+// arrangements opens showing sixteen and not four followed by sixteen.
+const cardDom = new JSDOM(
+  '<body>' +
+  '<div class="research-card-inner" data-table-block ' +
+  'data-table-title="Census">' +
+  '<div class="card-clip-head"><h3>Census</h3>' +
+  '<button data-panel-open="" data-table-title="Census">Open</button>' +
+  '</div><div class="card-clip">' +
+  '<h4>Dyads</h4>' +
+  '<table><thead><tr><th>Pair</th><th>Count</th></tr></thead><tbody>' +
+  '<tr><td>Mutual</td><td>35</td></tr>' +
+  '<tr><td>Null</td><td>125</td></tr></tbody></table>' +
+  '<h4>Triads</h4>' +
+  '<div data-panel-drop>' +
+  '<table><thead><tr><th>Code</th><th>Count</th></tr></thead><tbody>' +
+  '<tr><td>003</td><td>365</td></tr></tbody></table></div>' +
+  '<div class="table-hidden" aria-hidden="true">' +
+  '<table data-table-name="full"><thead><tr><th>Code</th><th>Count</th>' +
+  '</tr></thead><tbody>' +
+  '<tr><td>003</td><td>365</td></tr>' +
+  '<tr><td>012</td><td>100</td></tr>' +
+  '<tr><td>102</td><td>336</td></tr></tbody></table></div>' +
+  '</div></div></body>',
+  { pretendToBeVisual: true, runScripts: "outside-only" });
+cardDom.window.eval(readFileSync("www/tables.js", "utf8"));
+const cw = cardDom.window;
+const cdoc = cw.document;
+
+cdoc.querySelector("[data-panel-open]")
+  .dispatchEvent(new cw.Event("click", { bubbles: true }));
+const panel = cdoc.querySelector(".table-view");
+check("the card heading control opens the whole card", !!panel);
+
+if (panel) {
+  const tables = panel.querySelectorAll(".table-view-one table");
+  check("the shortened table is dropped and the whole one kept",
+    tables.length === 2);
+  check("the triad table opens at its full length",
+    tables.length === 2 && tables[1].tBodies[0].rows.length === 3);
+  check("each table gets its own toolbar",
+    panel.querySelectorAll(".table-view-bar").length === 2);
+  check("each table gets its own counter",
+    panel.querySelectorAll(".table-view-count").length === 2);
+
+  // Searching one table must not touch the other.
+  const searches = panel.querySelectorAll("input[type=search]");
+  searches[0].value = "Mutual";
+  searches[0].dispatchEvent(new cw.Event("input", { bubbles: true }));
+  const firstRows = panel.querySelectorAll(".table-view-one")[0]
+    .querySelectorAll("tbody tr").length;
+  const secondRows = panel.querySelectorAll(".table-view-one")[1]
+    .querySelectorAll("tbody tr").length;
+  check("a search in one table leaves the other alone",
+    firstRows === 1 && secondRows === 3);
+
+  // The control that opened this has nothing to open from inside it.
+  check("the opened copy carries no open control of its own",
+    !panel.querySelector("[data-panel-open], [data-table-open]"));
+
+  check("the card underneath is left as it was",
+    cdoc.querySelectorAll(".card-clip table").length === 3 &&
+    !!cdoc.querySelector(".card-clip .table-hidden"));
+
+  cdoc.dispatchEvent(new cw.KeyboardEvent("keydown",
+    { key: "Escape", bubbles: true }));
+  check("escape closes the card panel", !cdoc.querySelector(".table-view"));
+}
+
+// ---- Names stay data ------------------------------------------------
+// A person chip carries the name as an attribute and a listener reads
+// it back. A name from an uploaded file therefore never sits inside a
+// line of script, and characters that would end a quoted string arrive
+// at the server exactly as they were typed.
+const chipDom = new JSDOM(
+  "<body><div class=\"chip-row\"></div></body>",
+  { pretendToBeVisual: true, runScripts: "outside-only" });
+const sent = {};
+chipDom.window.Shiny = {
+  setInputValue: (name, value) => { sent[name] = value; }
+};
+chipDom.window.eval(readFileSync("www/tables.js", "utf8"));
+const awkward = "Ada O'Neil\\');alert(1)//";
+const chipButton = chipDom.window.document.createElement("button");
+chipButton.setAttribute("data-person", awkward);
+chipButton.textContent = awkward;
+chipDom.window.document.querySelector(".chip-row").appendChild(chipButton);
+chipButton.dispatchEvent(new chipDom.window.Event("click", { bubbles: true }));
+check("a person chip sends the name it carries",
+  sent.chip_person === awkward);
+check("the awkward characters survive unchanged",
+  typeof sent.chip_person === "string" &&
+  sent.chip_person.indexOf("alert(1)") > 0);
+
+const modelButton = chipDom.window.document.createElement("button");
+modelButton.setAttribute("data-model", "qwen2.5:7b");
+chipDom.window.document.querySelector(".chip-row").appendChild(modelButton);
+modelButton.dispatchEvent(new chipDom.window.Event("click", { bubbles: true }));
+check("a model card sends the identifier it carries",
+  sent.pull_choice === "qwen2.5:7b");
+
+// ---- A card says it is cut off only when it is ----------------------
+// The community card holds a menu, two numbers, and a sentence, and it
+// never fills the height the row is held to. A control offering to open
+// it would promise something that is not there.
+const clipDom = new JSDOM(
+  '<body>' +
+  '<div class="research-card-inner" data-table-block data-table-title="Full">' +
+  '<div class="card-clip-head"><h3>Full</h3>' +
+  '<button class="card-clip-open" data-panel-open>Open</button></div>' +
+  '<div class="card-clip" id="tall"></div></div>' +
+  '<div class="research-card-inner" data-table-block data-table-title="Short">' +
+  '<div class="card-clip-head"><h3>Short</h3>' +
+  '<button class="card-clip-open" data-panel-open>Open</button></div>' +
+  '<div class="card-clip" id="short"></div></div>' +
+  "</body>",
+  { pretendToBeVisual: true, runScripts: "outside-only" });
+clipDom.window.eval(readFileSync("www/tables.js", "utf8"));
+
+// jsdom lays nothing out, so the two measurements are supplied the way
+// a browser would report them.
+const setSize = (id, scrollHeight, clientHeight) => {
+  const node = clipDom.window.document.getElementById(id);
+  Object.defineProperty(node, "scrollHeight",
+    { value: scrollHeight, configurable: true });
+  Object.defineProperty(node, "clientHeight",
+    { value: clientHeight, configurable: true });
+};
+setSize("tall", 900, 430);
+setSize("short", 310, 430);
+clipDom.window.TesseraTables.measureClips();
+
+const blockOf = (id) =>
+  clipDom.window.document.getElementById(id).parentNode;
+check("a card with more in it than fits says so",
+  blockOf("tall").classList.contains("is-clipped"));
+check("a card that fits does not",
+  !blockOf("short").classList.contains("is-clipped"));
+
+// One pixel of sub pixel rounding is not more content.
+setSize("short", 431, 430);
+clipDom.window.TesseraTables.measureClips();
+check("a pixel of rounding does not count as more content",
+  !blockOf("short").classList.contains("is-clipped"));
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail > 0 ? 1 : 0);

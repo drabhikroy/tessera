@@ -23,7 +23,13 @@
     svg: null,
     layerEdges: null,
     layerNodes: null,
-    tooltip: null
+    tooltip: null,
+    sim: null,           /* the live force layout, while one is running */
+    simFrame: null,      /* the pending animation frame, or null */
+    simCap: null,        /* largest network live layout is offered for */
+    home: null,          /* the coordinates the server sent, for Settle */
+    held: {},            /* nodes a reader has pinned in place, by id */
+    spread: 1            /* how far apart the live layout holds people */
   };
 
   var WORLD = 1000;      /* layout coordinates scale to this square */
@@ -34,9 +40,9 @@
   var reducedMotion = window.matchMedia &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* Wire format guard. The server sends rows, but if a future change
-     regresses to column form, the renderer heals it rather than going
-     silently blank, which is how this bug hid the first time. */
+  /* Wire format guard. The server sends rows. If some later change
+     sends columns instead, the renderer reshapes them rather than
+     going blank, which is the failure that is hardest to notice. */
   function normalize(table) {
     if (Array.isArray(table)) return table;
     if (table && typeof table === "object") {
@@ -137,6 +143,9 @@
 
   /* Node radius maps the chosen measure onto a bounded range. A square
      root keeps big values from swallowing the map. */
+  /* Square root scaling, because a reader compares node areas rather
+     than radii, and a linear radius exaggerates the busiest person by
+     roughly the square of their lead. */
   function refreshScale() {
     var max = 0;
     state.data.nodes.forEach(function (n) {
@@ -150,10 +159,10 @@
     return 7 + 13 * Math.sqrt(node[state.sizeBy] / state.sizeMax);
   }
 
-  /* Positions are stored on the node in world units the first time
-     they are read, then reused. Dragging edits these directly, so the
-     layout the person arranges by hand persists until the next dataset
-     loads. */
+  /* Positions are stored on the node in world units when first read,
+     then reused. Dragging and the live layout both edit these
+     directly, so an arrangement made by hand lasts until the next
+     dataset loads. */
   function px(node) {
     if (node._x === undefined) node._x = PAD + node.x * (WORLD - 2 * PAD);
     return node._x;
@@ -163,6 +172,8 @@
     return node._y;
   }
 
+  /* One place writes the viewBox, so pan, zoom, fit, and the full
+     screen switch cannot disagree about where the view is. */
   function setViewBox() {
     var v = state.view;
     state.svg.setAttribute("viewBox",
@@ -188,6 +199,10 @@
     });
   }
 
+  /* Breadth first out from one person to the requested depth. Depth is
+     one or two in practice: past two steps almost everyone in a
+     connected network is included and the spotlight stops saying
+     anything. */
   function computeReach(id, depth) {
     var seen = {};
     seen[id] = true;
@@ -218,6 +233,8 @@
 
   /* Group focus is the legend acting as a filter: one group stays lit
      so its footprint on the map reads at a glance. */
+  /* Passing the group already in focus turns the filter off, so the
+     same legend chip both lights a group and releases it. */
   function focusGroup(group) {
     state.selected = null;
     state.groupFocus = group;
@@ -232,6 +249,19 @@
     if (state.selected !== null) return !!state.reach[node.id];
     if (state.groupFocus !== null) return node.group === state.groupFocus;
     return true;
+  }
+
+  /* Dimming is a class on each node and tie rather than a redraw. The
+     positions must not move when the spotlight changes, or the reader
+     loses the map they had just learned. */
+  function clearRoute() {
+    state.route = null;
+    if (!state.svg) return;
+    state.svg.classList.remove("routing");
+    state.svg.querySelectorAll(".on-route").forEach(function (el) {
+      el.classList.remove("on-route");
+    });
+    updateLabels();
   }
 
   function applyDimming() {
@@ -270,6 +300,17 @@
     return !!keyIds[node.id];
   }
 
+  /* The key people are the highest scorers on the measure currently
+     sizing the map, so the names on screen always explain the sizes on
+     screen. */
+  function routeNames() {
+    var on = {};
+    if (state.route && state.route.ids) {
+      state.route.ids.forEach(function (id) { on[id] = true; });
+    }
+    return on;
+  }
+
   function keyPeople() {
     var ranked = state.data.nodes.slice().sort(function (a, b) {
       return b[state.sizeBy] - a[state.sizeBy];
@@ -282,14 +323,20 @@
     return ids;
   }
 
+  /* Labels are recomputed rather than toggled, since which names count
+     as key changes with the sizing measure and with the selection. */
   function updateLabels() {
     var keys = keyPeople();
+    var onRoute = routeNames();
     var byId = {};
     state.data.nodes.forEach(function (n) { byId[n.id] = n; });
     state.layerNodes.querySelectorAll(".node").forEach(function (el) {
       var node = byId[Number(el.getAttribute("data-id"))];
       var t = el.querySelector(".node-label");
-      if (t) t.classList.toggle("hide", !labelWanted(node, keys));
+      /* Names along a route are always shown, whatever the label
+         setting says. A route whose stops cannot be read is a shape. */
+      var wanted = onRoute[node.id] === true || labelWanted(node, keys);
+      if (t) t.classList.toggle("hide", !wanted);
     });
   }
 
@@ -311,6 +358,11 @@
   }
   function hideTip() { state.tooltip.classList.remove("show"); }
 
+  /* Builds one person as a group element holding a shape, an optional
+     pip, an optional fragility ring, a label, and every interaction the
+     node answers to. The whole node is assembled in one place rather
+     than in a chain of decorating passes, because a node that is half
+     built is a node that draws wrong for one frame. */
   function buildNode(node) {
     var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     var gl = glyphFor(node.group);
@@ -360,6 +412,9 @@
       g.appendChild(ring);
     }
 
+    /* The label sits below the node rather than beside it, so a dense
+       cluster spreads its names vertically instead of overlapping them
+       in one horizontal band. */
     var label = document.createElementNS("http://www.w3.org/2000/svg", "text");
     label.setAttribute("x", cx);
     label.setAttribute("y", cy + r + 17);
@@ -394,21 +449,48 @@
       moved = true;
       node._x = p.x;
       node._y = p.y;
+      /* While the live layout is running, a node being held is pinned
+         rather than merely moved, so the forces treat it as fixed and
+         everything attached to it follows the hand instead of fighting
+         it back toward where it was. */
+      pinDragged(node, true);
       redrawNode(node);
     });
     g.addEventListener("pointerup", function (ev) {
       g.releasePointerCapture(ev.pointerId);
       if (!moved) {
         select(state.selected === node.id ? null : node.id);
+      } else {
+        pinDragged(node, false);
       }
       down = null;
     });
+    g.addEventListener("dblclick", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggleHold(node);
+    });
+    /* Enter and Space both toggle, matching what a button does
+       elsewhere on the page. The default is suppressed because Space
+       would otherwise scroll the map out from under the person who
+       just pressed it. */
     g.addEventListener("keydown", function (ev) {
       if (ev.key === "Enter" || ev.key === " ") {
         ev.preventDefault();
         select(state.selected === node.id ? null : node.id);
+        return;
+      }
+      /* The keyboard equivalent of a double press. Pinning is the one
+         thing on this map that only the mouse could reach otherwise,
+         and a control only the mouse can reach is not a control. */
+      if (ev.key === "p" || ev.key === "P") {
+        ev.preventDefault();
+        toggleHold(node);
       }
     });
+    /* Focus raises the same tooltip a hover does, positioned from the
+       node box rather than a pointer. A keyboard reader gets the same
+       information as a mouse reader, at the same moment. */
     g.addEventListener("mouseenter", function (ev) {
       showTip(node, ev.clientX, ev.clientY);
     });
@@ -438,6 +520,8 @@
 
   /* Moving one node repositions its own marks and every tie that
      touches it, so an edge never lags behind the node it joins. */
+  /* Only the moved node and the ties touching it are rewritten. A full
+     render on every pointer move would be correct and unusable. */
   function redrawNode(node) {
     var g = state.layerNodes.querySelector(
       '.node[data-id="' + node.id + '"]');
@@ -466,6 +550,257 @@
       });
   }
 
+  /* ---- Live layout ---------------------------------------------------
+
+     The map arrives with coordinates the server computed in three
+     passes, and that arrangement is better than anything a few hundred
+     frames of physics will find, because it knows which people are in
+     which community and it separates overlapping nodes at the end.
+     Nothing here replaces it. This is the other thing a reader wants,
+     which is to take hold of a node, pull it out of the knot it is in,
+     and watch what it is attached to come with it.
+
+     The physics is in www/layout.js and is not the expensive part. What
+     is expensive is writing several thousand positions back into the
+     document sixty times a second, so the size at which this is offered
+     is decided by measuring a redraw rather than by measuring the
+     forces. Above that size the control says why it is off instead of
+     going quiet or going slow. */
+
+  /* Largest network the live layout is offered for. Measured once, on
+     the machine the app is running on, because the answer on a desktop
+     and the answer on a phone are not the same answer. */
+  /* How far apart the live layout holds people. Three settings rather
+     than a slider: a slider inside a row of square controls is a
+     different kind of thing in a place with no room for it, and three
+     steps cover the reason anyone reaches for this, which is a map
+     that came out too dense to read or too sparse to see. */
+  var SPREADS = [
+    { label: "close together", value: 1100 },
+    { label: "the usual distance", value: 2400 },
+    { label: "spread out", value: 5200 }
+  ];
+
+  function liveLayoutCap() {
+    if (state.simCap !== null) return state.simCap;
+    var cap = 1200;
+    if (window.TesseraLayout && window.TesseraLayout.measure) {
+      /* One frame of forces at a size in the middle of the range. The
+         redraw costs several times this, so the budget is a fraction of
+         a sixty per second frame rather than all of it. */
+      var ms = window.TesseraLayout.measure(600, 1800, 6);
+      if (ms > 4) cap = 600;
+      if (ms > 12) cap = 250;
+    }
+    state.simCap = cap;
+    return cap;
+  }
+
+  function liveLayoutAvailable() {
+    return Boolean(window.TesseraLayout) && Boolean(state.data) &&
+      state.data.nodes.length <= liveLayoutCap();
+  }
+
+  /* Node objects the simulation can move, sharing nothing with the
+     renderer except the numbers that come back out of them. */
+  function buildSimulation() {
+    var order = {};
+    var points = state.data.nodes.map(function (n, i) {
+      order[n.id] = i;
+      return { x: px(n), y: py(n) };
+    });
+    var pairs = [];
+    state.data.edges.forEach(function (e) {
+      var a = order[e.from];
+      var b = order[e.to];
+      if (a !== undefined && b !== undefined && a !== b) pairs.push([a, b]);
+    });
+    var sim = window.TesseraLayout.create(points, pairs);
+    sim.order = order;
+    Object.keys(state.held).forEach(function (id) {
+      var i = order[id];
+      if (i !== undefined) sim.pin(i);
+    });
+    if (state.spread !== 1) sim.setSpread(SPREADS[state.spread].value);
+    return sim;
+  }
+
+  function pinDragged(node, held) {
+    if (!state.sim) return;
+    var i = state.sim.order[node.id];
+    if (i === undefined) return;
+    if (held) {
+      state.sim.nodes[i].x = node._x;
+      state.sim.nodes[i].y = node._y;
+      state.sim.pin(i);
+      /* A drag is a new question, so the arrangement gets to move
+         again. Without this a settled map lets one node be pulled out
+         and nothing follows it. */
+      state.sim.reheat();
+    } else if (!state.held[node.id]) {
+      state.sim.unpin(i);
+      state.sim.reheat();
+    }
+  }
+
+  /* A node a reader has pinned for good.
+
+     Dragging one out of a knot only helps while the forces are running;
+     the moment they settle again the arrangement has forgotten. Pinning
+     is how a reader says where someone belongs and has it stay there,
+     which is the thing an arranged layout is for. Double press to pin,
+     double press again to release. */
+  function toggleHold(node) {
+    var id = node.id;
+    if (state.held[id]) {
+      delete state.held[id];
+    } else {
+      state.held[id] = true;
+    }
+    if (state.sim) {
+      var i = state.sim.order[id];
+      if (i !== undefined) {
+        if (state.held[id]) {
+          state.sim.nodes[i].x = node._x;
+          state.sim.nodes[i].y = node._y;
+          state.sim.pin(i);
+        } else {
+          state.sim.unpin(i);
+        }
+        state.sim.reheat();
+      }
+    }
+    markHeld();
+  }
+
+  /* Pinned people are marked on the map. A pin that cannot be seen is a
+     pin a reader loses track of, and then the arrangement has parts
+     that will not move for reasons nobody remembers. */
+  function markHeld() {
+    if (!state.layerNodes) return;
+    state.layerNodes.querySelectorAll(".node").forEach(function (el) {
+      var id = Number(el.getAttribute("data-id"));
+      el.classList.toggle("held", Boolean(state.held[id]));
+    });
+  }
+
+  function releaseHeld() {
+    state.held = {};
+    if (state.sim) {
+      state.sim.unpinAll();
+      state.sim.reheat(0.8);
+    }
+    markHeld();
+  }
+
+  /* One frame: step the forces, copy the coordinates back onto the
+     nodes, redraw. Every node and every tie moves, so this rewrites the
+     whole drawing rather than the parts around one node. */
+  function simFrame() {
+    if (!state.sim) return;
+    var largest = state.sim.step();
+    state.data.nodes.forEach(function (n, i) {
+      n._x = state.sim.nodes[i].x;
+      n._y = state.sim.nodes[i].y;
+    });
+    redrawAll();
+    if (largest < 0.05) {
+      /* It has stopped changing in any way a reader could see. The
+         simulation stays in place so a drag can wake it, but no frames
+         are spent on it. */
+      state.simFrame = null;
+      return;
+    }
+    state.simFrame = window.requestAnimationFrame(simFrame);
+  }
+
+  function startLiveLayout() {
+    if (!liveLayoutAvailable()) return false;
+    if (state.home === null) {
+      state.home = state.data.nodes.map(function (n) {
+        return { x: px(n), y: py(n) };
+      });
+    }
+    state.sim = buildSimulation();
+    if (state.simFrame === null) {
+      state.simFrame = window.requestAnimationFrame(simFrame);
+    }
+    return true;
+  }
+
+  function stopLiveLayout() {
+    if (state.simFrame !== null) {
+      window.cancelAnimationFrame(state.simFrame);
+      state.simFrame = null;
+    }
+    state.sim = null;
+  }
+
+  /* Back to the arrangement the server sent. A reader who has pushed
+     the map into a shape they cannot read needs one press that undoes
+     all of it, and the computed layout is the thing to go back to
+     rather than a random restart. */
+  function restoreLayout() {
+    stopLiveLayout();
+    /* Back to the computed arrangement means back to all of it, pins
+       included. A reader pressing this wants the map they started with,
+       not the map they started with plus six people nailed down. */
+    state.held = {};
+    state.spread = 1;
+    if (state.home !== null) {
+      state.data.nodes.forEach(function (n, i) {
+        n._x = state.home[i].x;
+        n._y = state.home[i].y;
+      });
+    } else {
+      state.data.nodes.forEach(function (n) {
+        n._x = undefined;
+        n._y = undefined;
+      });
+    }
+    redrawAll();
+    markHeld();
+  }
+
+  /* Every position written in one pass. The per node redraw looks up
+     its elements by selector, which is fine once per drag and far too
+     slow sixty times a second across every node, so this walks the two
+     layers it already has. */
+  function redrawAll() {
+    if (!state.layerNodes || !state.layerEdges) return;
+    var byId = {};
+    state.data.nodes.forEach(function (n) { byId[n.id] = n; });
+    state.layerNodes.querySelectorAll(".node").forEach(function (el) {
+      var node = byId[Number(el.getAttribute("data-id"))];
+      if (!node) return;
+      var cx = node._x, cy = node._y, r = radiusFor(node);
+      var mark = el.querySelector(".mark");
+      if (mark) {
+        var d = shapePath(glyphFor(node.group).shape, r, cx, cy);
+        if (d === null) {
+          mark.setAttribute("cx", cx);
+          mark.setAttribute("cy", cy);
+        } else {
+          mark.setAttribute("d", d);
+        }
+      }
+      var pip = el.querySelector(".pip");
+      if (pip) { pip.setAttribute("cx", cx); pip.setAttribute("cy", cy); }
+      var ring = el.querySelector(".cut-ring");
+      if (ring) { ring.setAttribute("cx", cx); ring.setAttribute("cy", cy); }
+      var label = el.querySelector(".node-label");
+      if (label) {
+        label.setAttribute("x", cx);
+        label.setAttribute("y", cy + r + 17);
+      }
+    });
+    state.layerEdges.querySelectorAll("path").forEach(function (p) {
+      var a = byId[Number(p.getAttribute("data-from"))];
+      var b = byId[Number(p.getAttribute("data-to"))];
+      if (a && b) p.setAttribute("d", edgePath(a, b));
+    });
+  }
+
   /* Ties bend gently rather than running straight. The curve is a small
      fixed fraction of each tie length, which keeps parallel runs apart
      and reads calmer at every zoom. */
@@ -491,9 +826,23 @@
     var margin = 60;
     var w = Math.max(maxX - minX + margin * 2, 200);
     var h = Math.max(maxY - minY + margin * 2, 200);
-    var side = Math.max(w, h);
     var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-    return { x: cx - side / 2, y: cy - side / 2, w: side, h: side };
+
+    /* The view is fitted to the shape of the panel rather than to a
+       square. A square viewBox inside a wide panel is letterboxed by
+       the browser, which leaves the network in a tall strip down the
+       middle with dead space on either side. Growing the tight box out
+       to the panel ratio spends the whole panel on the network. */
+    var box = state.svg.getBoundingClientRect();
+    var ratio = box.width > 0 && box.height > 0
+      ? box.width / box.height
+      : 1;
+    if (w / h < ratio) {
+      w = h * ratio;
+    } else {
+      h = w / ratio;
+    }
+    return { x: cx - w / 2, y: cy - h / 2, w: w, h: h };
   }
 
   /* A full rebuild per dataset keeps the code simple and honest; at
@@ -537,6 +886,13 @@
       p.setAttribute("fill", "none");
       p.setAttribute("data-from", e.from);
       p.setAttribute("data-to", e.to);
+      /* Two properties of the tie itself. A bridge is the only route
+         between what sits on either side of it; a crossing tie joins
+         two groups. Both are carried as classes so the stylesheet
+         decides whether they are shown, and the toggle above the map
+         is one class on the drawing rather than a redraw. */
+      if (e.bridge) p.classList.add("tie-bridge");
+      if (e.crossing) p.classList.add("tie-crossing");
       edges.appendChild(p);
     });
     state.data.nodes.forEach(function (n) {
@@ -594,27 +950,155 @@
 
     var bar = document.createElement("div");
     bar.className = "map-buttons";
-    [["+", "Zoom in"], ["\u2212", "Zoom out"], ["\u25CE", "Reset the view"]]
+    /* Icons rather than characters. A plus, a minus sign, and a circled
+       dot are three glyphs from three parts of a font, with three
+       different optical centers and three different weights, which is
+       why they never sat straight in their buttons however the box was
+       centered. These are one geometry on one 20 unit grid. */
+    var ICONS = {
+      plus: '<path d="M10 4.5v11M4.5 10h11"/>',
+      minus: '<path d="M4.5 10h11"/>',
+      reset: '<circle cx="10" cy="10" r="6.2"/><circle cx="10" cy="10" ' +
+        'r="1.6" fill="currentColor" stroke="none"/>',
+      /* Three bodies joined by two links, which is what the control
+         does to the map. */
+      live: '<circle cx="5" cy="6" r="2.1"/><circle cx="15" cy="8" ' +
+        'r="2.1"/><circle cx="9" cy="15" r="2.1"/>' +
+        '<path d="M7 6.4L13 7.6M14 10L10.2 13.2"/>',
+      /* An arrow returning to a point: back to the computed layout. */
+      home: '<path d="M4 10.5a6 6 0 106-6H5.5"/><path d="M8 1.8L5 4.7l3 ' +
+        '2.9"/>',
+      /* Two bodies with arrows pushing them apart. */
+      spread: '<circle cx="4.5" cy="10" r="2"/><circle cx="15.5" cy="10" ' +
+        'r="2"/><path d="M8 10h4M9.6 8.4L8 10l1.6 1.6M10.4 8.4L12 10l-1.6 ' +
+        '1.6"/>'
+    };
+    function iconMarkup(name) {
+      return '<svg viewBox="0 0 20 20" aria-hidden="true" class="map-icon" ' +
+        'fill="none" stroke="currentColor" stroke-width="1.8" ' +
+        'stroke-linecap="round">' + ICONS[name] + "</svg>";
+    }
+
+    [["plus", "Zoom in"], ["minus", "Zoom out"], ["reset", "Reset the view"]]
       .forEach(function (spec, i) {
         var b = document.createElement("button");
         b.type = "button";
-        b.textContent = spec[0];
+        b.innerHTML = iconMarkup(spec[0]);
         b.setAttribute("aria-label", spec[1]);
         b.title = spec[1];
         b.addEventListener("click", function () {
           var v = state.view;
           if (i === 2) {
+            /* Reset is a deliberate request, so it refits whether or
+               not the panel has changed size. */
             state.view = fitView();
           } else {
+            /* Zoom keeps the ratio the view already has. Forcing a
+               square here would undo the aspect fit on the first
+               press of a zoom button. */
             var f = i === 0 ? 0.82 : 1.22;
+            var ratio = v.w / v.h;
             var cx = v.x + v.w / 2, cy = v.y + v.h / 2;
             var w = Math.min(Math.max(v.w * f, 140), WORLD * 2.2);
-            state.view = { x: cx - w / 2, y: cy - w / 2, w: w, h: w };
+            var h = w / ratio;
+            state.view = { x: cx - w / 2, y: cy - h / 2, w: w, h: h };
           }
           setViewBox();
         });
         bar.appendChild(b);
       });
+
+    /* Live layout and the way back from it. Both are only offered when
+       the network is small enough for a redraw of every node to fit
+       inside a frame; above that the first control says so rather than
+       going quiet or going slow, because a control that does nothing is
+       worse than one that is not there. */
+    var live = document.createElement("button");
+    live.type = "button";
+    live.className = "map-live";
+    live.innerHTML = iconMarkup("live");
+    var setLiveLabel = function () {
+      var running = state.simFrame !== null || state.sim !== null;
+      var label = !liveLayoutAvailable()
+        ? "Live layout is off for networks this large, because moving " +
+          "every person on screen sixty times a second would not keep up"
+        : running ? "Stop the live layout" : "Start the live layout";
+      live.setAttribute("aria-label", label);
+      live.setAttribute("aria-pressed", running ? "true" : "false");
+      live.title = label;
+      live.disabled = !liveLayoutAvailable();
+      live.classList.toggle("on", running);
+    };
+    live.addEventListener("click", function () {
+      if (state.sim) {
+        stopLiveLayout();
+      } else {
+        startLiveLayout();
+      }
+      setLiveLabel();
+    });
+    setLiveLabel();
+    bar.appendChild(live);
+
+    /* How far apart to hold people. Cycles through three settings and
+       says which one it is on, since a control that changes something
+       without naming its state leaves a reader guessing what they just
+       did. */
+    var spread = document.createElement("button");
+    spread.type = "button";
+    spread.className = "map-spread";
+    spread.innerHTML = iconMarkup("spread");
+    var setSpreadLabel = function () {
+      var label = "Spacing: " + SPREADS[state.spread].label +
+        ". Press for the next setting.";
+      spread.setAttribute("aria-label", label);
+      spread.title = label;
+      spread.disabled = !liveLayoutAvailable();
+    };
+    spread.addEventListener("click", function () {
+      state.spread = (state.spread + 1) % SPREADS.length;
+      setSpreadLabel();
+      if (!state.sim) startLiveLayout();
+      if (state.sim) {
+        state.sim.setSpread(SPREADS[state.spread].value);
+        if (state.simFrame === null) {
+          state.simFrame = window.requestAnimationFrame(simFrame);
+        }
+      }
+      setLiveLabel();
+    });
+    setSpreadLabel();
+    bar.appendChild(spread);
+
+    var home = document.createElement("button");
+    home.type = "button";
+    home.innerHTML = iconMarkup("home");
+    home.setAttribute("aria-label", "Back to the computed layout");
+    home.title = "Back to the computed layout";
+    home.addEventListener("click", function () {
+      restoreLayout();
+      setSpreadLabel();
+      setLiveLabel();
+    });
+    bar.appendChild(home);
+
+    /* Full screen also belongs here. It had one control only, sitting
+       at the far right of the row above the map under the label Map
+       size, which is a long way from where a person looks for a view
+       control and easy to miss entirely. Both controls drive the same
+       toggle. */
+    var full = document.createElement("button");
+    full.type = "button";
+    full.setAttribute("data-fs-toggle", "");
+    full.setAttribute("aria-pressed", "false");
+    full.setAttribute("aria-label", "Full screen map");
+    full.title = "Full screen map";
+    full.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true" ' +
+      'class="map-icon"><path d="M3 7.5V3h4.5M12.5 3H17v4.5M17 12.5V17' +
+      'h-4.5M7.5 17H3v-4.5" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.8" stroke-linecap="round"/></svg>';
+    bar.appendChild(full);
+
     host.appendChild(bar);
   }
 
@@ -632,6 +1116,12 @@
       state.groupFocus = null;
       state.reach = {};
       state.view = null;
+      /* A running simulation belongs to the network it was built for.
+         Left alive across a dataset change it would be stepping an
+         index into an array that is no longer there. */
+      stopLiveLayout();
+      state.home = null;
+      state.held = {};
       state.data.nodes.forEach(function (n) {
         n._x = undefined; n._y = undefined;
       });
@@ -665,6 +1155,52 @@
     Shiny.addCustomMessageHandler("clear-selection", function (unused) {
       if (state.data) select(null);
     });
+    /* Which ties to mark: none, the bridges, or every tie that crosses
+       between groups. The class goes on the drawing rather than on each
+       tie, so switching is one attribute change and the positions never
+       move. */
+    Shiny.addCustomMessageHandler("tie-marks", function (mode) {
+      if (!state.svg) return;
+      state.svg.classList.remove("show-bridges", "show-crossing");
+      if (mode === "bridges") state.svg.classList.add("show-bridges");
+      if (mode === "crossing") state.svg.classList.add("show-crossing");
+    });
+
+    /* Highlights one route through the network. The route is computed
+       in R, where the graph already is, and arrives as the people along
+       it in order. Everything else dims, so a path of four ties inside
+       a network of two hundred is findable. */
+    Shiny.addCustomMessageHandler("show-route", function (route) {
+      if (!state.svg) return;
+      clearRoute();
+      if (!route || !route.ids || route.ids.length < 2) return;
+      state.route = route;
+      var onPath = {};
+      route.ids.forEach(function (id) { onPath[id] = true; });
+      state.svg.classList.add("routing");
+      state.layerNodes.querySelectorAll(".node").forEach(function (el) {
+        var id = Number(el.getAttribute("data-id"));
+        el.classList.toggle("on-route", onPath[id] === true);
+      });
+      /* A tie is on the route only if it joins two people who are
+         adjacent along it. Marking every tie between two people on the
+         route would light shortcuts the route does not take. */
+      var steps = {};
+      route.steps.forEach(function (step) {
+        steps[step.from + ":" + step.to] = true;
+        steps[step.to + ":" + step.from] = true;
+      });
+      state.layerEdges.querySelectorAll("path").forEach(function (el) {
+        var key = el.getAttribute("data-from") + ":" + el.getAttribute("data-to");
+        el.classList.toggle("on-route", steps[key] === true);
+      });
+      updateLabels();
+    });
+
+    Shiny.addCustomMessageHandler("clear-route", function (unused) {
+      clearRoute();
+    });
+
     Shiny.addCustomMessageHandler("clear-graph", function (unused) {
       state.data = null;
       state.selected = null;
@@ -681,15 +1217,53 @@
   }
   if (window.Shiny) handlers();
 
-  /* Entering or leaving full screen changes the drawing area, so the
-     view is refitted to keep the whole network on screen. */
-  window.addEventListener("resize", function () {
+  /* Anything that changes the drawing area changes what fits in it, so
+     the view is refitted. A window resize is the obvious case, but not
+     the only one: the panel also changes shape when the reading panel
+     beside it grows, when full screen is entered or left, and when a
+     phone is turned. A ResizeObserver on the panel itself catches all
+     of them, and the window listener stays as the fallback for
+     browsers without one. */
+  /* The refit is guarded on the measured size of the drawing area.
+     Anything that repaints without resizing, such as the see through
+     toggle, would otherwise arrive through the resize event and throw
+     away the reader's zoom and pan. The map should move when the space
+     it has changes, and at no other time. */
+  var lastFit = { w: 0, h: 0 };
+
+  function refit(force) {
     if (!state.data || !state.svg) return;
+    var box = state.svg.getBoundingClientRect();
+    if (box.width < 1 || box.height < 1) return;
+    var changed = Math.abs(box.width - lastFit.w) > 1 ||
+                  Math.abs(box.height - lastFit.h) > 1;
+    if (!changed && force !== true) return;
+    lastFit = { w: box.width, h: box.height };
     state.view = fitView();
     setViewBox();
-  });
+  }
+
+  var refitPending = false;
+  function refitSoon() {
+    if (refitPending) return;
+    refitPending = true;
+    window.requestAnimationFrame(function () {
+      refitPending = false;
+      refit();
+    });
+  }
+
+  window.addEventListener("resize", refitSoon);
+
+  function watchPanel() {
+    if (!window.ResizeObserver) return;
+    var host = document.getElementById("map-host");
+    if (!host) return;
+    new window.ResizeObserver(refitSoon).observe(host);
+  }
 
   function ready() {
+    watchPanel();
     state.tooltip = document.createElement("div");
     state.tooltip.id = "map-tooltip";
     state.tooltip.setAttribute("role", "status");
@@ -712,19 +1286,51 @@
 
   var on = false, seeThrough = false;
 
+  /* The two states of the see through control, on the same 20 unit grid
+     as the map controls so the whole set matches. */
+  var EYE_OPEN = '<svg viewBox="0 0 20 20" aria-hidden="true" ' +
+    'class="map-icon" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.6" stroke-linecap="round"><path d="M1.6 10S4.8 4.6 ' +
+    '10 4.6 18.4 10 18.4 10 15.2 15.4 10 15.4 1.6 10 1.6 10Z"/>' +
+    '<circle cx="10" cy="10" r="2.4"/></svg>';
+  var EYE_CLOSED = '<svg viewBox="0 0 20 20" aria-hidden="true" ' +
+    'class="map-icon" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.6" stroke-linecap="round"><path d="M1.6 10S4.8 4.6 ' +
+    '10 4.6 18.4 10 18.4 10 15.2 15.4 10 15.4 1.6 10 1.6 10Z"/>' +
+    '<circle cx="10" cy="10" r="2.4"/><path d="M3.4 16.6 16.6 3.4"/></svg>';
+
   function panel() { return document.querySelector(".map-panel"); }
   function reading() { return document.querySelector(".reading-panel"); }
 
   function setLabels() {
+    /* The control in the row above the map carries a word; the one on
+       the map carries an icon and keeps it. Both report their state. */
     var b = document.getElementById("fs-toggle");
     if (b) {
       b.textContent = on ? "Exit full screen" : "Full screen";
       b.setAttribute("aria-pressed", on ? "true" : "false");
     }
+    Array.prototype.forEach.call(
+      document.querySelectorAll(".map-buttons [data-fs-toggle]"),
+      function (m) {
+        m.setAttribute("aria-pressed", on ? "true" : "false");
+        var label = on ? "Exit full screen map" : "Full screen map";
+        m.setAttribute("aria-label", label);
+        m.title = label;
+      });
     var t = document.getElementById("fs-transparent");
     if (t) {
-      t.textContent = seeThrough ? "Solid panel" : "See through panel";
+      /* An icon rather than a label that swaps between two phrases. A
+         control whose words change is a control a reader has to read
+         twice to find out what state they are in; aria-pressed says the
+         same thing to a screen reader without the swap. */
+      t.innerHTML = seeThrough ? EYE_OPEN : EYE_CLOSED;
       t.setAttribute("aria-pressed", seeThrough ? "true" : "false");
+      var label = seeThrough
+        ? "Make the reading panel solid again"
+        : "See the map through the reading panel";
+      t.setAttribute("aria-label", label);
+      t.title = label;
     }
   }
 
@@ -734,6 +1340,101 @@
 
   function overlayActive() {
     return !!(overlay && overlay.parentNode);
+  }
+
+  /* The floating panel had a fixed width and no way to change it, so a
+     long card stack in full screen was a column of text a reader could
+     neither widen nor put away. Both controls are added on entering and
+     removed on leaving, so nothing of them exists in the split view. */
+  var PANEL_MIN = 300, PANEL_MAX_SHARE = 0.62;
+
+  function buildPanelChrome(r) {
+    if (r.querySelector(".panel-chrome")) return;
+    var chrome = document.createElement("div");
+    chrome.className = "panel-chrome";
+
+    var fold = document.createElement("button");
+    fold.type = "button";
+    fold.className = "btn fs-icon-btn panel-fold";
+    fold.setAttribute("aria-pressed", "false");
+    fold.setAttribute("aria-label", "Fold the reading panel away");
+    fold.title = "Fold the reading panel away";
+    fold.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true" ' +
+      'class="map-icon" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.8" stroke-linecap="round">' +
+      '<path d="M4.5 10h11"/></svg>';
+    fold.addEventListener("click", function () {
+      var folded = r.classList.toggle("folded");
+      fold.setAttribute("aria-pressed", folded ? "true" : "false");
+      var label = folded
+        ? "Unfold the reading panel"
+        : "Fold the reading panel away";
+      fold.setAttribute("aria-label", label);
+      fold.title = label;
+      fold.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true" ' +
+        'class="map-icon" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.8" stroke-linecap="round"><path d="' +
+        (folded ? "M10 4.5v11M4.5 10h11" : "M4.5 10h11") + '"/></svg>';
+    });
+
+    var title = document.createElement("span");
+    title.className = "panel-chrome-title";
+    title.textContent = "What this network says";
+
+    chrome.appendChild(title);
+    chrome.appendChild(fold);
+    r.insertBefore(chrome, r.firstChild);
+
+    /* The grip changes the width. It is a pointer drag rather than a
+       set of size presets, because the right width depends on the
+       network under the panel and only the reader can see that. */
+    var grip = document.createElement("div");
+    grip.className = "panel-grip";
+    grip.setAttribute("role", "separator");
+    grip.setAttribute("aria-orientation", "vertical");
+    grip.setAttribute("aria-label", "Drag to change the panel width");
+    grip.setAttribute("tabindex", "0");
+    var dragging = false;
+    function widthFrom(clientX) {
+      var right = window.innerWidth - 22;
+      var wanted = right - clientX;
+      var max = window.innerWidth * PANEL_MAX_SHARE;
+      return Math.min(Math.max(wanted, PANEL_MIN), max);
+    }
+    grip.addEventListener("pointerdown", function (ev) {
+      dragging = true;
+      grip.setPointerCapture(ev.pointerId);
+      ev.preventDefault();
+    });
+    grip.addEventListener("pointermove", function (ev) {
+      if (!dragging) return;
+      r.style.width = widthFrom(ev.clientX) + "px";
+    });
+    grip.addEventListener("pointerup", function (ev) {
+      dragging = false;
+      grip.releasePointerCapture(ev.pointerId);
+    });
+    /* The same adjustment from the keyboard, since a drag is not
+       available to everyone. */
+    grip.addEventListener("keydown", function (ev) {
+      var step = ev.key === "ArrowLeft" ? 40
+        : ev.key === "ArrowRight" ? -40 : 0;
+      if (step === 0) return;
+      ev.preventDefault();
+      var now = r.getBoundingClientRect().width;
+      var max = window.innerWidth * PANEL_MAX_SHARE;
+      r.style.width = Math.min(Math.max(now + step, PANEL_MIN), max) + "px";
+    });
+    r.appendChild(grip);
+  }
+
+  function stripPanelChrome(r) {
+    var chrome = r.querySelector(".panel-chrome");
+    if (chrome) chrome.remove();
+    var grip = r.querySelector(".panel-grip");
+    if (grip) grip.remove();
+    r.classList.remove("folded");
+    r.style.width = "";
   }
 
   function enter(p, r) {
@@ -846,6 +1547,7 @@
     if (on && !overlayActive()) {
       enter(p, r);
       buildOverlayControls();
+      buildPanelChrome(r);
       var req = requestNative(overlay);
       nativeAvailable = req !== null;
       if (req && typeof req.then === "function") {
@@ -854,6 +1556,7 @@
       }
     } else if (!on && overlayActive()) {
       exitNative();
+      stripPanelChrome(r);
       leave(p, r);
       var stale = document.getElementById("fs-trouble");
       if (stale) stale.remove();
@@ -897,7 +1600,12 @@
      network changes, so the click is caught at the document level rather
      than bound to an element that may be replaced. */
   document.addEventListener("click", function (ev) {
-    var hit = ev.target.closest("#fs-toggle");
+    /* Either handle answers. The control in the row above the map keeps
+       its id, since that is what the suites and any bookmarklet reach
+       for, and the copy on the map carries the attribute, because two
+       elements cannot share an id. Matching both means neither control
+       depends on the other being present. */
+    var hit = ev.target.closest("#fs-toggle, [data-fs-toggle]");
     if (hit) { on = !on; apply(); return; }
     if (ev.target.closest("#fs-exit")) { on = false; apply(); return; }
     var see = ev.target.closest("#fs-transparent");
@@ -916,14 +1624,20 @@
     var see = document.createElement("button");
     see.id = "fs-transparent";
     see.type = "button";
-    see.className = "btn fs-bar-btn";
+    see.className = "btn fs-bar-btn fs-icon-btn";
     see.setAttribute("aria-pressed", "false");
 
     var exit = document.createElement("button");
     exit.id = "fs-exit";
     exit.type = "button";
-    exit.className = "btn fs-bar-btn fs-exit";
-    exit.textContent = "Exit full screen";
+    exit.className = "btn fs-bar-btn fs-icon-btn fs-exit";
+    /* The same four corners as the control that enters full screen,
+       turned inward and crossed, so the pair reads as one idea in two
+       states rather than as an icon and a sentence. */
+    exit.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true" ' +
+      'class="map-icon" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.8" stroke-linecap="round">' +
+      '<path d="M8 3v5H3M17 8h-5V3M12 17v-5h5M3 12h5v5"/></svg>';
     exit.title = "Exit full screen (Escape)";
     exit.setAttribute("aria-label",
       "Exit full screen. The Escape key also works.");

@@ -1,89 +1,144 @@
 /* styles.css
    The chrome stays close to monochrome slate so the network map is the
-   only strong color on screen. Two theme modes and four color palettes
-   combine into eight states; every text token below was checked against
-   its background at 4.5 to 1 or better, and group identity never rides
-   on color alone because shape carries it too. */
+   only strong color on screen. Two theme modes cross with five color
+   settings, which makes ten states, and every one of them is measured
+   rather than asserted: tests/palette_test.mjs reads this file, resolves
+   each state the way a browser would, and fails the build when a token
+   falls below its threshold.
+
+   The thresholds are WCAG 2.2 AA. Text clears 4.5 to 1 against the
+   surface behind it. Interface parts and graphical objects clear 3 to 1.
+   The one deliberate exception is --seam, the hairline used for row
+   rules and section dividers, which carries no information and is held
+   to a presence floor instead, because a divider set at 3 to 1 boxes
+   in every table row and fights the content it separates.
+
+   Group identity never rides on color alone. Each node carries a shape,
+   a fill variant, and a legend entry that repeats both, so the twelve
+   group colors assist recognition rather than carrying it. That is why
+   the separation floor between group colors is set where it is, and why
+   the monochrome setting can drop hue altogether. */
 
 :root,
 [data-bs-theme="dark"] {
   --bg: #0f1317;
   --surface: #171d24;
   --raised: #202a34;
-  --line: #33404d;
+  --line: #5d748c;
+  --seam: #33404d;
   --text: #e9eef3;
   --muted: #a7b4c1;
   --accent: #8fc1de;
-  --edge: #55636f;
+  --edge: #5f6e7c;
   --halo: #0f1317;
   --focus: #ffd166;
 
-  /* Group colors, Okabe and Ito set. Group nine is the shared bucket for
-     anything past the eighth group. */
+  /* Group colors, close to the Okabe and Ito set. Group nine is the
+     shared bucket for anything past the eighth group. */
   --g1: #e69f00; --g2: #56b4e9; --g3: #009e73; --g4: #f0e442;
-  --g5: #4d9fdc; --g6: #d55e00; --g7: #cc79a7; --g8: #bdbdbd;
-  --g9: #7a8794; --g10: #8fd6c4; --g11: #b48ade; --g12: #a67c52;
+  --g5: #0072b2; --g6: #d55e00; --g7: #cc79a7; --g8: #8a8a8a;
+  --g9: #768797; --g10: #2b8f7a; --g11: #7e53ac; --g12: #885e3d;
 
   --font-body: "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --font-data: "SF Mono", "Menlo", "Consolas", monospace;
 }
 
+/* Light mode redefines all twelve group colors rather than patching a
+   few. A hue bright enough to clear 3 to 1 against a near black panel
+   sits near 1.3 to 1 against white, so one shared value cannot serve
+   both modes, and a partial override leaves the gaps the audit is there
+   to find. */
 [data-bs-theme="light"] {
   --bg: #f2f4f6;
   --surface: #ffffff;
   --raised: #ffffff;
-  --line: #cdd6de;
+  --line: #888e94;
+  --seam: #c6d0d9;
   --text: #17222d;
   --muted: #465562;
   --accent: #10577e;
-  --edge: #5f7182;
+  --edge: #778695;
   --halo: #ffffff;
   --focus: #b3540b;
-  --g5: #0072b2; --g8: #6f6f6f; --g10: #2b8f7a; --g11: #7b4fa8;
-  --g12: #7a5232;
+
+  --g1: #ca8700; --g2: #3b9ed1; --g3: #009e73; --g4: #9d9900;
+  --g5: #0072b2; --g6: #d55e00; --g7: #cc79a7; --g8: #8e8b88;
+  --g9: #7a8794; --g10: #2b8f7a; --g11: #7b4fa8; --g12: #7a5232;
 }
 
-/* Palette tuned for deuteranopia and protanopia. Red against green is
-   never the distinction; blue, orange, yellow, and purple do the work,
-   with lightness steps as backup. */
+/* Deuteranopia. The red to green axis is gone, so blue against amber
+   does the separating, with lightness steps as the backup channel. */
 body.cb-deutan {
-  --g1: #e69f00; --g2: #56b4e9; --g3: #f0e442; --g4: #4d7ac9;
-  --g5: #b48ade; --g6: #9c6a00; --g7: #cfe0f2; --g8: #8a8a8a;
-  --g9: #6b6b6b; --g10: #2f4b7c; --g11: #d9c37a; --g12: #5c4b8a;
+  --g1: #e69f00; --g2: #59b9f0; --g3: #f0e442; --g4: #476994;
+  --g5: #b389dc; --g6: #9c6a00; --g7: #626a56; --g8: #846f50;
+  --g9: #6a6a6a; --g10: #646580; --g11: #d9c37a; --g12: #6b60a9;
 }
 [data-bs-theme="light"] .cb-deutan,
 [data-bs-theme="light"].cb-deutan {
-  --g4: #0b4f8f; --g7: #274b66; --g8: #6f6f6f;
+  --g1: #ca8700; --g2: #259fd5; --g3: #9d9909; --g4: #0f5598;
+  --g5: #9c85ed; --g6: #9c6a00; --g7: #224560; --g8: #78746b;
+  --g9: #585349; --g10: #315084; --g11: #a7944e; --g12: #756ebf;
 }
 
-/* Palette tuned for tritanopia. Blue against green and yellow against
-   pink are avoided; reds, pinks, and teals separated by lightness. */
+/* Protanopia. The same axis is lost as in deuteranopia, and the first
+   attempt at a separate palette here came out looking almost identical
+   to the deuteranopia one, because the same constraints produce nearly
+   the same answer twice.
+
+   What actually differs is that protanopia also darkens the long
+   wavelength end, so a deep red keeps its hue distance and loses its
+   light, arriving muddy rather than merely shifted. This palette is
+   built with that as an explicit condition: no color may lose more than
+   about a third of its luminance under the simulation, and every color
+   must sit a measured distance from its deuteranopia counterpart. The
+   result is warmer at the light end and carries its darks in blue
+   rather than in red. */
+body.cb-protan {
+  --g1: #ff9901; --g2: #3d93c8; --g3: #f3ea6b; --g4: #5f629c;
+  --g5: #c39bd3; --g6: #8b6a21; --g7: #416d7f; --g8: #9b9b9b;
+  --g9: #88887a; --g10: #3867af; --g11: #e4d6a3; --g12: #515fbe;
+}
+[data-bs-theme="light"] .cb-protan,
+[data-bs-theme="light"].cb-protan {
+  --g1: #ae6a00; --g2: #277caf; --g3: #959231; --g4: #00366e;
+  --g5: #8c69bf; --g6: #7a5510; --g7: #153a42; --g8: #808892;
+  --g9: #5f646d; --g10: #16375c; --g11: #827134; --g12: #554785;
+}
+
+/* Tritanopia. The blue to yellow axis is gone, so the palette moves
+   onto the red to green axis that remains, separated by lightness. */
 body.cb-tritan {
-  --g1: #e4643b; --g2: #7fd4c1; --g3: #f2a0ac; --g4: #9e1b32;
-  --g5: #146b5c; --g6: #f5cfc0; --g7: #8f8f8f; --g8: #e0e0e0;
-  --g9: #5c5c5c; --g10: #b03050; --g11: #3fa08c; --g12: #d98a76;
+  --g1: #e4643b; --g2: #7fd4c1; --g3: #f5a4b0; --g4: #bf3041;
+  --g5: #1d7465; --g6: #f5cfc0; --g7: #8f8f8f; --g8: #e0e0e0;
+  --g9: #676768; --g10: #b63a57; --g11: #3fa08c; --g12: #d88975;
 }
 [data-bs-theme="light"] .cb-tritan,
 [data-bs-theme="light"].cb-tritan {
-  --g2: #0e6f5c; --g6: #7a3216; --g8: #4a4a4a;
+  --g1: #e4643b; --g2: #69a08a; --g3: #e07483; --g4: #9d1831;
+  --g5: #146b5c; --g6: #b98a7e; --g7: #888e8e; --g8: #a59091;
+  --g9: #5c5c5c; --g10: #b13452; --g11: #3c9f8b; --g12: #ce816d;
 }
 
-/* Monochrome high contrast. Grays step widely and the shapes carry all
-   group identity. Text tokens push to the extremes. */
+/* Monochrome. Hue is removed entirely and the twelve groups become an
+   even lightness ramp, so shape and fill variant carry group identity
+   by themselves. The ramp holds a minimum step of roughly twice the
+   just noticeable difference, which is the most twelve steps can do
+   inside the lightness range that still clears 3 to 1 against the
+   panel. Text tokens push to the extremes. */
 body.cb-mono {
-  --text: #ffffff; --muted: #cfcfcf; --line: #5a5a5a;
-  --accent: #ffffff; --edge: #8c8c8c; --focus: #ffffff;
-  --g1: #f2f2f2; --g2: #c9c9c9; --g3: #a3a3a3; --g4: #7d7d7d;
-  --g5: #dedede; --g6: #b5b5b5; --g7: #909090; --g8: #6a6a6a;
-  --g9: #575757; --g10: #e6e6e6; --g11: #bcbcbc; --g12: #4a4a4a;
+  --text: #ffffff; --muted: #cfcfcf; --line: #727272; --seam: #4a4a4a;
+  --accent: #ffffff; --edge: #7a7b7c; --focus: #ffffff;
+  --g1: #ffffff; --g2: #d5d5d5; --g3: #acacac; --g4: #919191;
+  --g5: #e3e3e3; --g6: #b9b9b9; --g7: #9e9e9e; --g8: #848484;
+  --g9: #767676; --g10: #f1f1f1; --g11: #c7c7c7; --g12: #6a6a6a;
 }
 [data-bs-theme="light"] .cb-mono,
 [data-bs-theme="light"].cb-mono {
-  --text: #000000; --muted: #363636; --line: #767676;
-  --accent: #000000; --edge: #5f5f5f; --focus: #000000;
-  --g1: #1a1a1a; --g2: #454545; --g3: #6b6b6b; --g4: #8f8f8f;
-  --g5: #2e2e2e; --g6: #585858; --g7: #7d7d7d; --g8: #a1a1a1;
-  --g9: #b8b8b8; --g10: #0d0d0d; --g11: #383838; --g12: #949494;
+  --text: #000000; --muted: #363636; --line: #767676; --seam: #a1a1a1;
+  --accent: #000000; --edge: #777777; --focus: #000000;
+  --g1: #141414; --g2: #353535; --g3: #4e4e4e; --g4: #676767;
+  --g5: #1e1e1e; --g6: #414141; --g7: #5a5a5a; --g8: #838383;
+  --g9: #919191; --g10: #030303; --g11: #2a2a2a; --g12: #757575;
 }
 
 * { box-sizing: border-box; }
@@ -100,13 +155,17 @@ html, body {
 
 /* Header */
 
+/* The header carries the brand, the appearance toggle, and the three
+   links that open a dialog. Nothing in it changes the network, which is
+   why it can stay a quiet strip across the top rather than competing
+   with the control row underneath. */
 .app-header {
   display: flex;
   align-items: center;
   gap: 18px;
   padding: 16px 24px;
   background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--seam);
   flex-wrap: wrap;
 }
 .header-actions { align-items: center; }
@@ -175,6 +234,11 @@ select, .btn, input[type="text"] {
   font-size: 15px;
 }
 
+/* One button style, with a single emphasized variant. Two levels is
+   enough to say which action is the expected one, and a third level
+   only makes a reader work out where it ranks. Every button clears the
+   44 pixel target size, which is the floor a finger needs and a floor a
+   mouse never suffers from. */
 .btn {
   cursor: pointer;
   min-width: 44px;
@@ -202,6 +266,9 @@ body.cb-mono .btn-primary {
 
 /* Layout: map beside the reading panel, stacking on narrow screens. */
 
+/* The map and its reading panel share one row on a wide window and
+   stack on a narrow one. The map keeps the larger share, since the
+   panel is read once and the map is returned to. */
 .main-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr);
@@ -212,34 +279,39 @@ body.cb-mono .btn-primary {
   .main-grid { grid-template-columns: 1fr; }
 }
 
+/* The map is given a height tied to the viewport rather than to
+   whatever the reading panel beside it happens to need. Left to the
+   grid, a long card stack stretched the map to match it, and a taller
+   window made the map taller again without adding anything to see. The
+   clamp keeps it large enough to work in and short enough that the
+   whole thing stays on screen with the controls above it. */
 .map-panel {
   position: relative;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;
   overflow: hidden;
-  min-height: 560px;
+  height: clamp(520px, 68vh, 860px);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
-#map-host { width: 100%; height: 100%; min-height: 540px; }
+#map-host { width: 100%; height: 100%; }
 
 #network-map {
   width: 100%;
   height: 100%;
-  min-height: 540px;
   display: block;
   cursor: grab;
   touch-action: none;
 }
 #network-map:active { cursor: grabbing; }
 
+/* Ties are painted at full strength. An opacity layer here would mean
+   the color a reader sees is the blend rather than the token, and the
+   palette audit measures the token. */
 #network-map path[data-from] {
   stroke: var(--edge);
-  opacity: 0.7;
 }
-[data-bs-theme="light"] #network-map path[data-from] { opacity: 0.85; }
-body.cb-mono #network-map path[data-from] { opacity: 0.85; }
 
 .node { cursor: pointer; }
 .node .mark {
@@ -262,6 +334,10 @@ body.cb-mono #network-map path[data-from] { opacity: 0.85; }
 /* Variant one is hollow: the hue moves to a thick outline so the glyph
    reads as clearly different from its solid twin. Variant two keeps the
    solid fill and adds a centered pip. */
+/* Variant one is hollow, so the group color becomes the outline itself
+   rather than a fill inside a text colored rim. That is why the group
+   colors are held to the full interface contrast threshold in the
+   palette audit: in this variant the color is the boundary. */
 .node.var-1 .mark {
   fill: none;
   stroke-width: 4;
@@ -285,6 +361,8 @@ body.cb-mono #network-map path[data-from] { opacity: 0.85; }
   pointer-events: none;
 }
 
+/* Fragility is marked with geometry rather than with a color, so the
+   warning survives the monochrome setting and every simulation. */
 .cut-ring {
   fill: none;
   stroke: var(--text);
@@ -292,6 +370,9 @@ body.cb-mono #network-map path[data-from] { opacity: 0.85; }
   stroke-dasharray: 4 3;
 }
 
+/* Names are painted with a halo of the page color behind them, so a
+   label crossing a tie or another node stays readable without the map
+   having to move anything out of its way. */
 .node-label {
   fill: var(--text);
   font-size: 17px;
@@ -327,6 +408,8 @@ body.cb-mono #network-map path[data-from] { opacity: 0.85; }
   display: flex;
   gap: 8px;
 }
+/* The view controls sit on the map, bottom right, out of the way of a
+   network that tends to fill the middle. */
 .map-buttons button {
   min-width: 44px;
   min-height: 44px;
@@ -358,6 +441,8 @@ body.cb-mono #network-map path[data-from] { opacity: 0.85; }
 
 /* Reading panel */
 
+/* The panel scrolls inside the height the map sets, so the two sit as
+   one block and the page below them starts at a predictable place. */
 .reading-panel {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -366,7 +451,7 @@ body.cb-mono #network-map path[data-from] { opacity: 0.85; }
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 78vh;
+  height: clamp(520px, 68vh, 860px);
   overflow-y: auto;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
@@ -386,7 +471,7 @@ body.cb-mono #network-map path[data-from] { opacity: 0.85; }
 .caveat {
   color: var(--muted);
   font-size: 13.5px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--seam);
   padding-top: 10px;
 }
 
@@ -409,6 +494,10 @@ body.cb-mono #network-map path[data-from] { opacity: 0.85; }
 
 .people-wrap { padding: 6px 22px 30px; }
 
+/* The people table is the same numbers the map carries, in the order a
+   reader chooses. It exists so the map is never the only route to the
+   data: sorting, scanning, and copying are all things a table does
+   better than a picture. */
 .people-table {
   width: 100%;
   border-collapse: collapse;
@@ -420,7 +509,7 @@ body.cb-mono #network-map path[data-from] { opacity: 0.85; }
 .people-table th, .people-table td {
   padding: 10px 14px;
   text-align: left;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--seam);
   font-size: 14.5px;
 }
 .people-table th {
@@ -452,13 +541,17 @@ body.cb-mono #network-map path[data-from] { opacity: 0.85; }
 
 /* Modal restyle so Shiny dialogs match both modes. The btn-default class
    is what Shiny gives modal buttons, so it is covered on purpose. */
+/* Shiny gives modal buttons the btn-default class rather than
+   btn-secondary, so every rule that dresses a modal button has to name
+   btn-default as well. Leaving it out is why dialog buttons kept their
+   light styling in dark mode for three versions. */
 .modal-content {
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: 12px;
 }
-.modal-header, .modal-footer { border-color: var(--line); }
+.modal-header, .modal-footer { border-color: var(--seam); }
 .modal-content .btn-default, .modal-content .btn {
   background: var(--raised);
   color: var(--text);
@@ -543,6 +636,8 @@ a { color: var(--accent); }
 .legend-item:hover { background: var(--raised); color: var(--text); }
 .legend-item.static { cursor: default; }
 .legend-item.static:hover { background: var(--surface); }
+/* Counts are set in the data face with tabular figures, so the numbers
+   in a column line up on their digits rather than drifting. */
 .legend-count {
   font-family: var(--font-data);
   font-size: 12px;
@@ -631,6 +726,8 @@ a { color: var(--accent); }
 .caveat-line { font-size: 13px; }
 
 /* Walkthrough */
+/* The walkthrough runs in a modal rather than as an overlay on the app,
+   because the first slide has nothing to point at yet. */
 .tour-modal .modal-body { text-align: center; }
 .vignette {
   width: min(320px, 100%);
@@ -670,11 +767,63 @@ a { color: var(--accent); }
 .v-arrow { stroke: var(--accent); stroke-width: 2.4; }
 .v-house { fill: none; stroke: var(--accent); stroke-width: 2; }
 
-/* Settings swatches */
-.swatch-row { display: inline-flex; gap: 5px; margin-left: 10px; vertical-align: middle; }
-.swatch { display: inline-block; }
-.swatch circle, .swatch rect, .swatch path { stroke: var(--text); stroke-width: 1.2; }
-.swatch-name { vertical-align: middle; }
+/* ---- The color settings ---------------------------------------------
+
+   Five options, each with a name, a line saying who it is for, and the
+   colors themselves. All three start at the same left edge, which is
+   the whole of what makes the list readable: swatches run on after
+   labels of different lengths sit at five different distances from the
+   margin, and the eye has nothing to compare down.
+
+   The control sits at the top of its own row rather than centered
+   against it, since the row is three lines tall and a control floating
+   in the middle of one belongs to none of them. */
+
+.palette-choices .shiny-options-group { display: grid; gap: 4px; }
+.palette-choices .radio { margin: 0; }
+.palette-choices .radio label,
+.palette-choices .form-check {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: start;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  margin: 0;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  min-height: 0;
+  cursor: pointer;
+}
+.palette-choices .radio label:hover,
+.palette-choices .form-check:hover { background: var(--raised); }
+.palette-choices input[type="radio"] {
+  grid-row: 1 / span 3;
+  grid-column: 1;
+  margin: 2px 0 0;
+  float: none;
+  min-width: 16px;
+  min-height: 16px;
+}
+.palette-choices .swatch-name,
+.palette-choices .swatch-note,
+.palette-choices .swatch-row { grid-column: 2; }
+
+.swatch-name {
+  font-size: 14.5px;
+  color: var(--text);
+  line-height: 1.3;
+}
+.swatch-note {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.swatch-row { display: flex; gap: 6px; margin-top: 4px; }
+.swatch { display: block; }
+.swatch circle, .swatch rect, .swatch path {
+  stroke: var(--text);
+  stroke-width: 1.2;
+}
 .radio label { min-height: 44px; display: flex; align-items: center; }
 
 /* Local models guide */
@@ -688,8 +837,6 @@ a { color: var(--accent); }
   padding: 4px 16px 12px;
   margin: 12px 0;
 }
-.setup-steps { margin: 6px 0 0; padding-left: 22px; }
-.setup-steps li { margin-bottom: 8px; }
 .model-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -745,12 +892,12 @@ code {
 }
 .theme-toggle:hover { background: var(--raised); }
 
-/* Control row breathes: consistent gaps, aligned baselines, and a soft
+/* Control row breathes: consistent gaps, level baselines, and a soft
    divider under it so the map area feels distinct from the controls. */
 .control-row {
   gap: 18px 20px;
   padding: 16px 24px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--seam);
   align-items: flex-end;
 }
 .control label {
@@ -817,12 +964,12 @@ code {
 }
 .research-card table th {
   color: var(--muted);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--seam);
   text-align: left;
   font-weight: 600;
 }
 .research-card table td {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--seam);
   font-variant-numeric: tabular-nums;
 }
 
@@ -846,6 +993,10 @@ body > .container-fluid { overflow: visible; }
    The map fills the viewport and the reading panel floats over its top
    right corner. The panel can be made see through so the network under
    it stays legible, and Escape or the button returns to the split view. */
+/* Full screen paints its own element over everything, and the browser
+   paints nothing else, so both controls have to live inside that
+   element. An exit control anywhere else leaves a reader in a full
+   screen map with no visible way out. */
 #fs-overlay {
   position: fixed;
   inset: 0;
@@ -874,7 +1025,11 @@ body.map-fullscreen { overflow: hidden; }
   position: absolute;
   top: 22px;
   right: 22px;
-  width: min(380px, calc(100vw - 44px));
+  /* Wide enough at the start to hold a card without wrapping every
+     sentence, and adjustable from there with the grip on its left
+     edge. The old fixed 380 pixels put the whole reading into a
+     column narrower than the text it holds. */
+  width: min(520px, calc(100vw - 44px));
   max-height: calc(100vh - 110px);
   overflow-y: auto;
   z-index: 1060;
@@ -890,12 +1045,27 @@ body.map-fullscreen { overflow: hidden; }
 /* See through mode. The blur keeps text readable over a busy network,
    and the cards inside lose their own fill so only one layer tints. */
 .floating-reading.see-through {
-  background: color-mix(in srgb, var(--surface) 62%, transparent);
-  backdrop-filter: blur(9px);
-  -webkit-backdrop-filter: blur(9px);
+  background: color-mix(in srgb, var(--surface) 26%, transparent);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  border-color: color-mix(in srgb, var(--line) 55%, transparent);
+  box-shadow: none;
 }
+/* The cards lose their own fill entirely. Two translucent layers
+   stacked read as one opaque one, which is what kept the old see
+   through mode looking solid. */
 .floating-reading.see-through .card {
-  background: color-mix(in srgb, var(--raised) 45%, transparent);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--line) 45%, transparent);
+}
+/* The blur carries readability where it is supported. Where it is not,
+   the text keeps its own halo so it stays legible over a busy map
+   rather than the panel quietly going solid again. */
+@supports not ((backdrop-filter: blur(1px)) or
+               (-webkit-backdrop-filter: blur(1px))) {
+  .floating-reading.see-through {
+    background: color-mix(in srgb, var(--surface) 68%, transparent);
+  }
 }
 /* Where color-mix is unsupported the panel stays solid, which is the
    safe direction to fail. */
@@ -911,7 +1081,15 @@ body.map-fullscreen { overflow: hidden; }
   display: flex;
   gap: 10px;
 }
-.map-buttons { z-index: 1060; }
+/* The map controls sit above the map and below everything else. A value
+   above the Bootstrap dialog layer would float them over every dialog
+   the app opens. In full screen they live inside the overlay, which
+   makes its own stacking context, so they rise with it and need no help
+   here. */
+.map-buttons { z-index: 3; }
+body.map-fullscreen .map-buttons { z-index: 12; }
+.map-icon { width: 18px; height: 18px; display: block; }
+.map-buttons button { color: var(--text); }
 
 .colophon {
   color: var(--muted);
@@ -944,15 +1122,64 @@ body.map-fullscreen { overflow: hidden; }
    The brand sat hard against the first tab, so the two read as one run
    of text. A divider and generous space separate identity from
    navigation. */
+/* The brand and the tabs are separate children of the bar, taking their
+   vertical padding from two different places: the title slot from
+   bslib, the links from Bootstrap. The first attempt at this stretched
+   both to full height and centered their contents, which did not work,
+   because the nav sits inside a collapse wrapper that was left out of
+   the rule and went on centering itself.
+
+   This version centers at every level between the bar and the text, and
+   removes the two things that were pushing the text off center inside
+   its own box. First, vertical padding and margins on the brand and the
+   nav, which differ between the two. Second, the underline under the
+   active tab: a border on one link only makes that link taller than its
+   neighbors and shifts its text up by half the border, so every link
+   now carries the same border and only the active one has a color in
+   it. */
+.navbar > .container-fluid,
+.navbar > .container,
+.navbar .navbar-collapse {
+  display: flex;
+  align-items: center;
+}
+.navbar .navbar-brand,
+.navbar .navbar-nav {
+  display: flex;
+  align-items: center;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
 .navbar .brand {
   padding-right: 22px;
   margin-right: 22px;
-  border-right: 1px solid var(--line);
+  border-right: 1px solid var(--seam);
+  align-items: center;
 }
-.navbar .navbar-nav { gap: 6px; }
-.navbar .nav-link { padding-left: 14px; padding-right: 14px; }
+/* The name is set at nineteen pixels beside a twenty six pixel mark, so
+   its own line box is what decides where the text sits. Holding it at
+   one keeps the box the height of the text rather than the height of
+   the font, which is what let it float above the mark. */
+.navbar .app-name { line-height: 1; }
+.navbar .brand-mark { flex: 0 0 auto; }
 
-/* ---- Control row alignment -----------------------------------------
+.navbar .navbar-nav { gap: 6px; }
+.navbar .nav-link {
+  padding-left: 14px;
+  padding-right: 14px;
+  display: flex;
+  align-items: center;
+  border-bottom: 2px solid transparent;
+  line-height: 1.2;
+}
+.navbar .nav-link.active {
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+/* ---- Control row layout --------------------------------------------
    Each control is a label above an input. Shiny wraps file inputs and
    selects in containers with their own margins, which pushed the two
    apart so labels and fields no longer lined up. Fixing the label block
@@ -1073,3 +1300,1500 @@ body.cb-mono .fs-exit {
   color: #ffffff;
   white-space: nowrap;
 }
+
+/* ---- Overview screen ------------------------------------------------
+   The leftmost tab, and the only screen that says anything before a
+   network is loaded. It is laid out as a short reading page rather than
+   a dashboard: one column of sections, generous space between them, and
+   nothing that needs a control to be understood.
+
+   Grouping is done with whitespace and common region rather than with
+   rules and boxes, so the eye gets the structure without the page
+   filling up with borders. The two hero buttons are the only strong
+   color on the screen, which is what makes them findable. */
+
+.overview {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+}
+
+/* The hero puts the claim and the picture side by side on a wide
+   window and stacks them on a narrow one. The picture goes second in
+   the source order so a screen reader meets the sentence first. */
+.ov-hero {
+  display: flex;
+  gap: 40px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 0 34px;
+}
+.ov-hero-text { flex: 1 1 380px; }
+.ov-hero-art { flex: 0 1 340px; min-width: 260px; }
+
+.ov-title {
+  font-size: 40px;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+}
+.ov-tagline {
+  color: var(--accent);
+  font-size: 17px;
+  margin: 0 0 18px;
+}
+.ov-lede {
+  font-size: 17px;
+  line-height: 1.6;
+  max-width: 54ch;
+  margin: 0 0 22px;
+}
+
+.ov-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.ov-actions .btn { min-height: 44px; padding: 0 20px; }
+
+/* The hero picture uses the same tokens as the map, so it follows the
+   mode and the color setting without a second set of colors to keep in
+   step. The stroke around each node is the text color for the same
+   reason it is on the map: the outline carries the shape even where the
+   fill sits close to the panel behind it. */
+.ov-art { width: 100%; height: auto; display: block; }
+.ov-tie { stroke: var(--edge); stroke-width: 2; }
+.ov-node { stroke: var(--text); stroke-width: 1.75; }
+.ov-g1 { fill: var(--g1); }
+.ov-g2 { fill: var(--g2); }
+.ov-g3 { fill: var(--g3); }
+.ov-name {
+  fill: var(--text);
+  font-size: 12px;
+  font-family: var(--font-body);
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--halo);
+  stroke-width: 3px;
+}
+
+.ov-section {
+  font-size: 21px;
+  margin: 38px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--seam);
+}
+
+/* Three cards, equal weight, no ranking implied. They wrap to one
+   column on a narrow window rather than shrinking, because three
+   columns of four words each is worse than one column of sentences. */
+.ov-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 18px;
+}
+.ov-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.ov-card h3 { margin: 0 0 8px; font-size: 16px; }
+.ov-card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+/* The worked example sets the picture against the sentences the app
+   would write about it, so the claim on this page can be checked
+   against the thing it describes rather than taken on trust. */
+.ov-worked {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 22px 24px;
+}
+.ov-worked-art { flex: 0 1 300px; min-width: 240px; }
+.ov-worked-text { flex: 1 1 340px; }
+.ov-quote {
+  margin: 14px 0;
+  padding: 14px 18px;
+  background: var(--bg);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.ov-note { color: var(--muted); font-size: 13.5px; margin: 10px 0 0; }
+
+.ov-asks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 22px;
+}
+.ov-ask h3 { margin: 0 0 8px; font-size: 16px; }
+.ov-ask p { font-size: 14.5px; }
+
+/* The sample file is shown as a table rather than as text in a code
+   block, because the reader is comparing it against a spreadsheet and
+   that is the shape a spreadsheet has. */
+.ov-csv {
+  border-collapse: collapse;
+  font-family: var(--font-data);
+  font-size: 13px;
+  margin-top: 12px;
+}
+.ov-csv th, .ov-csv td {
+  border: 1px solid var(--line);
+  padding: 5px 14px;
+  text-align: left;
+}
+.ov-csv th { background: var(--raised); font-weight: 600; }
+
+.ov-close {
+  margin-top: 42px;
+  padding-top: 24px;
+  border-top: 1px solid var(--seam);
+  text-align: center;
+}
+.ov-close p {
+  color: var(--muted);
+  max-width: 62ch;
+  margin: 0 auto 18px;
+  font-size: 14.5px;
+}
+.ov-close .btn { min-height: 44px; padding: 0 20px; }
+
+/* On a narrow window the hero picture is the first thing that should
+   give up space, since the sentence beside it carries the meaning. */
+@media (max-width: 720px) {
+  .ov-title { font-size: 32px; }
+  .ov-hero { gap: 24px; padding-bottom: 24px; }
+  .ov-hero-art { order: 2; }
+}
+
+/* ---- Control row grouping -------------------------------------------
+   The row carried eight controls as eight equal siblings, each under a
+   heavy uppercase label, which gave a reader no way to tell that the
+   network menu and the sizing menu do different kinds of work. They are
+   now three groups with one quiet heading each: what is loaded, how the
+   map is read, and the actions that apply to the whole view.
+
+   The grouping is done with a heading and space rather than with boxes,
+   and the labels lose their uppercase and their letter spacing, since
+   the row should be scanned rather than read. */
+
+.control-row {
+  display: flex;
+  gap: 14px 34px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding: 14px 24px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--seam);
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* The actions group is pushed to the far end of the row, so the two
+   controls that undo things are nowhere near the menus that set them. */
+.control-group.actions { margin-left: auto; }
+
+.group-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.control-items {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+/* Individual labels sit under a group heading now, so they no longer
+   need to shout. Sentence case at a smaller size reads as the caption
+   it is rather than as a second row of headings. */
+.control label {
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+/* Reset undoes work, so it is the quietest thing in the row. It keeps
+   the full target size; only the color weight changes. */
+.btn-quiet {
+  background: transparent;
+  color: var(--muted);
+}
+.btn-quiet:hover { background: var(--raised); color: var(--text); }
+
+/* On a narrow window the groups stack, and the actions group gives up
+   its position at the end rather than stranding itself on a line of
+   its own. */
+@media (max-width: 900px) {
+  .control-group.actions { margin-left: 0; }
+}
+
+/* ---- Reading cards and the people table -----------------------------
+   Both surfaces held everything they had at once. The card stack was
+   four paragraphs deep before a reader reached the caveat at the
+   bottom, and the table opened with fifty eight rows of decimals. The
+   information is unchanged in both; what changed is how much of it
+   arrives before the reader asks for the rest. */
+
+.card-prose { margin: 0; }
+
+/* A disclosure rather than a script, so it works before the client
+   bundle loads and reports its own state to assistive technology. */
+.card-more { margin-top: 6px; }
+.card-more summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--accent);
+  list-style: none;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.card-more summary::-webkit-details-marker { display: none; }
+/* The triangle is written here rather than left to the browser, since
+   the native marker cannot be positioned consistently across engines. */
+.card-more summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+.card-more[open] summary::before { transform: rotate(90deg); }
+.card-more summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.card-more .card-prose { margin-top: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .card-more summary::before { transition: none; }
+}
+
+/* The column the table is sorted by carries a short track under its
+   number. The first version washed the whole cell, which read as a
+   selected row and made the length of the bar depend on how wide the
+   column happened to be. A fixed track is the same length in every row,
+   so one row can be compared against another rather than against the
+   layout. */
+.people-table td.barred { padding-bottom: 6px; }
+.people-table .cell-value { display: block; }
+.people-table .bar-track {
+  display: block;
+  width: 84px;
+  height: 4px;
+  margin-top: 5px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: var(--seam);
+  overflow: hidden;
+}
+.people-table .bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+/* The numeric columns take the width of their contents rather than an
+   equal share of the table. Eight equal columns gave Direct ties three
+   hundred pixels to hold two digits, which is what left the old wash
+   stretching most of the way across the screen. Name and Note absorb
+   the space instead. */
+.people-table td.num, .people-table th.num-head {
+  width: 1%;
+  white-space: nowrap;
+}
+.people-table th:first-child { width: 22%; }
+.people-table th:last-child { width: auto; }
+
+/* The table opens at twelve rows. Everything is present in the markup,
+   so sorting, finding, and copying all still see the whole table, and
+   the button only changes what is shown. */
+.people-wrap.short tbody tr:nth-child(n + 13) { display: none; }
+.show-all {
+  margin: 12px 24px 0;
+  min-height: 44px;
+}
+/* ---- Icon buttons ---------------------------------------------------
+   Every icon control in the app is a 20 unit square on a centered flex
+   box. Drawing them rather than setting them as text characters is
+   deliberate: a plus, a minus sign, and a circled dot come from three
+   parts of a font with three different optical centers, and no amount
+   of box centering puts them straight. Geometry on a shared grid does
+   what font metrics cannot. */
+
+.map-buttons button,
+.fs-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  color: var(--text);
+}
+.map-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+.fs-icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+/* The pressed state of the see through control is carried by color as
+   well as by aria-pressed, since a reader looking at the screen has no
+   access to the attribute. */
+.fs-icon-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---- Local model setup ----------------------------------------------
+   The setup screen replaces a numbered list that told a reader what to
+   go and do elsewhere. It reports what is actually true on this machine
+   and offers the two routes as a choice rather than assuming one. */
+
+.setup-status {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  margin-bottom: 14px;
+}
+.setup-status span { color: var(--muted); font-size: 13.5px; }
+/* State is named in the text of every one of these, so the border is a
+   second signal rather than the only one. */
+.setup-status.ready { border-left: 3px solid var(--g3); }
+.setup-status.partial { border-left: 3px solid var(--g1); }
+.setup-status.missing { border-left: 3px solid var(--line); }
+
+.setup-route { margin: 12px 0 18px; }
+.setup-route p { font-size: 14px; }
+
+.setup-scan {
+  border-top: 1px solid var(--seam);
+  padding-top: 14px;
+  margin-top: 6px;
+}
+.setup-scan p { font-size: 13.5px; color: var(--muted); }
+.setup-pick { color: var(--text) !important; font-weight: 600; }
+
+.fit-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.fit {
+  font-family: var(--font-data);
+  font-size: 12px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.fit-comfortable { border-color: var(--g3); color: var(--text); }
+.fit-workable { border-color: var(--g1); color: var(--text); }
+.fit-too-large { opacity: 0.7; }
+
+.setup-note {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg);
+  border-radius: 0 8px 8px 0;
+  font-size: 13.5px;
+}
+
+/* The path from a model that did not answer to the screen that fixes
+   it. The control sits with the message rather than in the header,
+   because that is where the reader is looking when it happens. */
+.model-trouble {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* ---- The floating panel in full screen -------------------------------
+   In full screen the panel is the only other thing on the window, so it
+   needs the two controls a window has: a way to change its width and a
+   way to get it out of the way. Both exist only while full screen is
+   on, and both are removed when it ends. */
+
+/* Folding has to beat the fixed height the reading panel carries in the
+   split view. Without this the content hid and the box stayed exactly
+   as tall as before, which is a fold that folds nothing. The panel
+   takes its height from its content in full screen, capped so a long
+   card stack still scrolls rather than running off the window. */
+.reading-panel.floating-reading {
+  height: auto;
+  max-height: calc(100vh - 110px);
+}
+.reading-panel.floating-reading.folded {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.panel-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--seam);
+  margin-bottom: 4px;
+}
+.panel-chrome-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Folded, the panel keeps only its own bar, so the reader can see the
+   whole network without losing the way back to the reading. */
+.floating-reading.folded > *:not(.panel-chrome):not(.panel-grip) {
+  display: none;
+}
+.floating-reading.folded {
+  max-height: none;
+  overflow: visible;
+  padding-bottom: 10px;
+}
+.floating-reading.folded .panel-chrome {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+/* The grip is a full height strip on the left edge. It is wider than it
+   looks so it can be caught without precision, and it takes focus so
+   the width can be set from the keyboard as well. */
+.panel-grip {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  cursor: ew-resize;
+  border-radius: 14px 0 0 14px;
+}
+.panel-grip::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 46px;
+  border-radius: 999px;
+  background: var(--line);
+}
+.panel-grip:hover::after,
+.panel-grip:focus-visible::after { background: var(--accent); }
+.panel-grip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* ---- Dialogs ---------------------------------------------------------
+   Bootstrap slides a dialog down from above the window. On a walkthrough
+   that is seven slides long the movement happens seven times and turns a
+   short read into something that keeps moving under the eye. The dialog
+   fades instead, and holds still for anyone who asked for less motion. */
+
+.modal.fade .modal-dialog {
+  transform: none;
+  transition: opacity 0.16s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal.fade .modal-dialog { transition: none; }
+}
+
+/* The local model screen is a set of steps side by side rather than one
+   long column, so it needs the width to hold them. */
+.models-modal .modal-dialog {
+  max-width: min(1060px, 94vw);
+}
+
+/* ---- The setup steps -------------------------------------------------
+   Three steps in a stack, each one a thing to decide. A step that is
+   done says so and stays readable, since a reader coming back needs to
+   see what they already chose. Only the step that is current carries
+   controls that matter, and the state comes from what is installed
+   rather than from a click count. */
+
+.modal-lede { color: var(--muted); font-size: 14.5px; max-width: 70ch; }
+
+.step-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.setup-step {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 18px 16px;
+  background: var(--surface);
+}
+.setup-step .step-body { margin-top: 10px; }
+.setup-step p { font-size: 14px; }
+
+.step-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.step-head h3 { margin: 0; font-size: 15.5px; flex: 1 1 auto; }
+
+/* The number is the thing the eye counts, so it holds its size whatever
+   the length of the title beside it. */
+.step-number {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-data);
+  font-size: 13px;
+  color: var(--muted);
+}
+.step-state {
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* State is named in words in every step, so the color and the border
+   are second and third signals rather than the only ones. */
+.setup-step.is-now { border-color: var(--accent); }
+.setup-step.is-now .step-number {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.setup-step.is-done .step-number,
+.setup-step.is-done .step-state { color: var(--g3); }
+.setup-step.is-wait { opacity: 0.72; }
+
+.step-note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+
+/* Four model cards side by side rather than stacked, which is what the
+   wider dialog is for. */
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+.model-grid .model-card { position: relative; }
+.model-grid .model-card p { font-size: 13px; }
+.model-grid .fit {
+  display: inline-block;
+  margin-bottom: 6px;
+}
+/* A model that will not run here is dimmed rather than hidden, since
+   the reason it is dimmed is the useful part. */
+.model-card.fit-too-large { opacity: 0.55; }
+.model-card.fit-comfortable { border-color: var(--g3); }
+
+/* ---- Help ------------------------------------------------------------
+   Help opens as a list of questions with every answer closed. A reader
+   arrives with one problem, so the screen should show them one screen
+   of questions rather than ten screens of answers to find it in. */
+
+.help-modal .modal-dialog { max-width: min(860px, 94vw); }
+.help-lede { color: var(--muted); font-size: 14.5px; max-width: 68ch; }
+
+.help-group {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 26px 0 8px;
+}
+.help-group:first-of-type { margin-top: 18px; }
+
+.help-section {
+  border-bottom: 1px solid var(--seam);
+}
+.help-section summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 12px 4px 12px 26px;
+  position: relative;
+  font-size: 15px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.help-section summary::-webkit-details-marker { display: none; }
+/* The marker is written here rather than left to the browser, since no
+   two engines place the native one the same way. */
+.help-section summary::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--muted);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transform: translateY(-50%);
+  transition: transform 0.15s ease;
+}
+.help-section[open] summary::before {
+  transform: translateY(-50%) rotate(90deg);
+  border-left-color: var(--accent);
+}
+.help-section[open] summary { font-weight: 600; }
+.help-section summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .help-section summary::before { transition: none; }
+}
+
+.help-body { padding: 0 4px 14px 26px; max-width: 72ch; }
+.help-body p { font-size: 14.5px; line-height: 1.6; }
+.help-aside {
+  color: var(--muted);
+  font-size: 13.5px;
+  border-left: 2px solid var(--seam);
+  padding-left: 12px;
+}
+
+/* A definition list without the markup of one, so each term sits beside
+   its meaning rather than above it and the column of terms can be
+   scanned on its own. */
+.help-term {
+  display: flex;
+  gap: 14px;
+  padding: 8px 0;
+  border-top: 1px solid var(--seam);
+}
+.help-term:first-child { border-top: none; }
+.term-name {
+  flex: 0 0 160px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.term-meaning { flex: 1 1 auto; color: var(--muted); font-size: 14px; }
+
+.help-foot {
+  margin-top: 24px;
+  padding-top: 14px;
+  border-top: 1px solid var(--seam);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .help-term { flex-direction: column; gap: 2px; }
+  .term-name { flex: 0 0 auto; }
+}
+
+/* ---- The model vignette ---------------------------------------------
+   The walkthrough slide about the optional model. One arrow, pointing
+   one way, because that is the claim the slide makes: text goes out to
+   the model and comes back reworded, and the network does not. */
+
+.vig-panel {
+  fill: var(--raised);
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+.vig-line { fill: var(--muted); opacity: 0.75; }
+.vig-arrow {
+  stroke: var(--accent);
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+}
+.vig-box {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+.vig-caption {
+  fill: var(--muted);
+  font-family: var(--font-data);
+  font-size: 12px;
+  text-anchor: middle;
+}
+
+/* ---- Model cards as the control -------------------------------------
+   The cards are the selection, so they are buttons. A grid of things to
+   compare beside a menu naming one of them asks a reader to match a
+   name to a card and then look away from both. */
+
+.model-grid .model-card {
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  color: var(--text);
+  font: inherit;
+}
+.model-grid .model-card:hover { border-color: var(--accent); }
+.model-grid .model-card:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+/* The chosen card is marked with a border, a fill, and a check in the
+   flag row, so the selection survives a color setting that removes hue
+   and is reported to assistive technology by aria-checked. */
+.model-grid .model-card.selected {
+  border-color: var(--accent);
+  border-width: 2px;
+  padding: 13px 15px;
+  background: var(--raised);
+}
+.card-flags { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+.held-flag {
+  font-family: var(--font-data);
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--g3);
+  color: var(--text);
+}
+
+/* ---- The hero emblem -------------------------------------------------
+   The tiles are quiet and the eight that carry a connection are not, so
+   the eye finds the structure inside the surface rather than being
+   handed a diagram. Nothing in it stands for a person or a measure. */
+
+.em-tile { fill: var(--line); }
+.em-live { fill: var(--accent); }
+/* The inner square on the larger marks is the four square motif of the
+   app mark, showing through at the sizes that have room for it. */
+.em-inner { fill: var(--surface); opacity: 0.55; }
+.em-join {
+  stroke: var(--edge);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
+/* ---- Help layout ----------------------------------------------------
+   The groups are a list down the left and one group of questions on the
+   right, so the screen only ever holds the questions from one of them.
+   Six groups stacked in a single scroll meant a reader looking for the
+   last one passed every answer in the first five. */
+
+.help-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.help-top .btn { min-height: 44px; flex: 0 0 auto; }
+
+.help-modal .nav-pills { gap: 2px; }
+.help-modal .nav-pills .nav-link {
+  text-align: left;
+  font-size: 14px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.help-modal .nav-pills .nav-link:hover { background: var(--raised); }
+.help-modal .nav-pills .nav-link.active {
+  background: var(--raised);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.help-panel { padding-left: 6px; }
+.help-panel .help-section:first-of-type { border-top: 1px solid var(--seam); }
+
+/* On a narrow window the list becomes a row above the questions rather
+   than a column beside them, which bslib handles by stacking; the rules
+   here only stop the pills from filling the width one per line. */
+@media (max-width: 700px) {
+  .help-modal .nav-pills { flex-direction: row; flex-wrap: wrap; }
+  .help-modal .nav-pills .nav-link { font-size: 13px; padding: 8px 10px; }
+}
+
+/* ---- Settings groups and the header gap ------------------------------ */
+
+.settings-group { margin-bottom: 18px; }
+.settings-group .control-items { margin-top: 6px; }
+
+/* The gap between the setup link and the two reference links. They are
+   different kinds of thing and the space says so without a divider. */
+.nav-gap { display: inline-block; width: 26px; }
+
+/* ---- The model answer ------------------------------------------------
+   The answer arrives as one string and would read as a wall if it were
+   set as one. It is split on the blank lines the model was asked to
+   leave, labeled with the model that wrote it, and set apart from the
+   computed text above it so the two are never mistaken for each
+   other. */
+
+.model-answer-block {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--bg);
+  border-left: 3px solid var(--accent);
+}
+.model-answer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--seam);
+}
+.model-badge {
+  font-family: var(--font-data);
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+.model-note { font-size: 12.5px; color: var(--muted); }
+.model-answer-block .model-answer {
+  margin: 0 0 10px;
+  font-size: 14.5px;
+  line-height: 1.62;
+  max-width: 68ch;
+}
+.model-answer-block .model-answer:last-child { margin-bottom: 0; }
+.model-hint { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
+
+/* A line the model itself numbered or bulleted keeps that shape rather
+   than being flattened into prose. The marker is redrawn here so the
+   list reads as one whatever the model used. */
+.model-answer-block .model-item {
+  position: relative;
+  padding-left: 18px;
+}
+.model-answer-block .model-item::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ---- Marked ties and routes ------------------------------------------
+   Two things about a tie that no per person score points at, and that a
+   reader cannot find by looking at a map of any size.
+
+   A bridge is a tie whose removal would break the network into more
+   pieces than before, so it is the only route between what sits on
+   either side of it. A crossing tie joins two different groups. These
+   are the ties that carry anything new into a cluster and the ones a
+   network misses first when they go.
+
+   The marks are off until asked for, because a map that shouts about
+   every property at once says nothing about any of them. */
+
+#network-map.show-bridges path[data-from]:not(.tie-bridge),
+#network-map.show-crossing path[data-from]:not(.tie-crossing) {
+  opacity: 0.22;
+}
+#network-map.show-bridges .tie-bridge,
+#network-map.show-crossing .tie-crossing {
+  stroke: var(--focus);
+  stroke-width: 3.2;
+}
+/* Dashes carry the same distinction without color, so the marks survive
+   the monochrome setting and every simulation. */
+#network-map.show-crossing .tie-crossing { stroke-dasharray: 7 4; }
+
+/* A route is the strongest statement the map makes, so everything else
+   gives way to it rather than merely dimming a little. */
+#network-map.routing path[data-from]:not(.on-route) { opacity: 0.12; }
+#network-map.routing .node:not(.on-route) { opacity: 0.22; }
+#network-map.routing path.on-route {
+  stroke: var(--focus);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+#network-map.routing .node.on-route .mark {
+  stroke: var(--focus);
+  stroke-width: 3;
+}
+
+/* ---- The census tables ----------------------------------------------- */
+
+.census-table { margin-bottom: 10px; }
+.census-meaning { color: var(--muted); font-size: 13.5px; }
+.census-share { color: var(--muted); }
+
+/* ---- The route finder ------------------------------------------------
+   It sits in the reading panel rather than the control row because its
+   answer is prose and belongs beside the other prose. The two menus
+   stack rather than sitting side by side, since the panel is narrow and
+   two half width menus of names truncate every name in them. */
+
+.route-box {
+  border-top: 1px solid var(--seam);
+  padding-top: 14px;
+  margin-top: 4px;
+}
+.route-box h3 {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+.route-picks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+.route-picks label { font-size: 12.5px; color: var(--muted); }
+
+.route-note { font-size: 14px; margin: 12px 0 8px; }
+.route-caveat { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; }
+
+/* The route reads as a sentence of names rather than a list, because
+   that is how a person would say it out loud. */
+.route-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.route-stop {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  font-size: 13.5px;
+}
+.route-arrow { color: var(--muted); }
+
+
+/* ---- The Statistics tab ----------------------------------------------
+   Each test carries its numbers and its reading in one card, because a
+   table of proportions with the readings somewhere else is how a reader
+   ends up quoting a number whose meaning they never saw. */
+
+.stats-page { max-width: 1100px; margin: 0 auto; padding: 24px 24px 60px; }
+.stats-intro h2 { font-size: 24px; margin: 0 0 10px; }
+.stats-intro p { max-width: 74ch; font-size: 15px; line-height: 1.6; }
+
+.stats-controls {
+  display: flex;
+  gap: 18px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin: 22px 0 10px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.stats-null-note { max-width: 78ch; }
+
+.stats-empty {
+  margin-top: 20px;
+  padding: 28px 24px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+}
+
+.stats-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 30px 0 14px;
+}
+.stats-head h3 { margin: 0; font-size: 19px; }
+.stats-meta { color: var(--muted); font-size: 13.5px; }
+
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 16px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.stat-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.stat-card h4 { margin: 0 0 4px; font-size: 16px; }
+
+/* The verdict is a word as well as a color, and the numbers behind it
+   are on the same card, so nothing about the result depends on being
+   able to see a hue. */
+.stat-verdict {
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.stat-card.band-strong { border-left-color: var(--g3); }
+.stat-card.band-clear { border-left-color: var(--g10); }
+.stat-card.band-edge { border-left-color: var(--g1); }
+.stat-card.band-none { border-left-color: var(--line); }
+.stat-card.band-strong .stat-verdict,
+.stat-card.band-clear .stat-verdict { color: var(--text); }
+
+.stat-note { color: var(--muted); font-size: 13px; margin: 2px 0 12px; }
+
+.stat-numbers {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-top: 1px solid var(--seam);
+  border-bottom: 1px solid var(--seam);
+}
+.stat-num { display: flex; flex-direction: column; gap: 2px; }
+.stat-value { font-family: var(--font-data); font-size: 16px; }
+.stat-label {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.stat-reading { font-size: 14px; line-height: 1.6; margin: 12px 0 0; }
+
+.stat-extra { margin-top: 30px; }
+.stat-extra h3 { font-size: 19px; margin: 0 0 14px; }
+
+.stat-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+.stat-actions .btn { min-height: 44px; }
+.stats-caveat { margin-top: 20px; max-width: 78ch; }
+
+/* ---- Census tables ---------------------------------------------------
+   The triad table opens at eight of its sixteen rows, since most
+   networks are mostly empty triads and the interesting counts are lower
+   down. Everything is in the markup either way. */
+
+.census-wrap.short tbody tr:nth-child(n + 9) { display: none; }
+.census-actions { margin: 8px 0 22px; }
+
+/* ---- A separator above the model control ----------------------------
+   The restate control acts on everything above it and produces
+   something below it, so it needs a line saying where the computed part
+   of the panel ends and the optional part begins. */
+
+.panel-foot {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+/* ---- Table blocks and the full size table view -----------------------
+
+   Two rules do the work of the layout complaint that started this.
+
+   The first is align-items on the research grid. Grid stretches its
+   items to a common height by default, so three cards holding a short
+   table, a menu, and a census sixteen rows deep all became as tall as
+   the census, and the two short ones each carried half a screen of
+   nothing under them. Sizing each card to its own content is one line
+   and removes the empty space entirely.
+
+   The second is that the long tables no longer live on the cards. Each
+   card holds enough of a table to recognize it and a control that opens
+   the whole thing over the page, which is where a reader who wants to
+   search or sort it was always going to end up. */
+
+/* The three cards on the Research tab hold a twelve row table, a menu,
+   and a census, and left to size themselves they are three very
+   different heights. Side by side that reads as a broken layout however
+   the space underneath is handled, so all three are held to one height
+   and the rest of each card is behind the control in its heading. */
+
+.research-grid { align-items: start; }
+.research-card > .card-body { padding: 0; }
+.research-card-inner { padding: 16px 18px 14px; }
+.card-clip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+}
+.card-clip-title {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text);
+}
+.card-clip-open {
+  min-height: 34px;
+  padding: 3px 12px;
+  font-size: 13px;
+  align-items: center;
+}
+
+/* A fixed height, and a fade at the foot only on a card that is
+   actually cut off. The fade matters where it applies: a hard cut looks
+   like a table that happens to end there, and a reader who thinks they
+   have seen the whole thing has no reason to press the control. On a
+   card that fits, both the fade and the control are noise, so
+   tables.js measures each card and sets is-clipped on the ones with
+   more in them than the height allows. */
+.card-clip {
+  height: 430px;
+  overflow: hidden;
+  position: relative;
+}
+.is-clipped .card-clip::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--surface));
+}
+.card-clip-open { display: none; }
+.is-clipped .card-clip-open { display: inline-flex; }
+
+/* A control in the heading and no control in the heading have to leave
+   the heading the same height, or the cards along a row stop lining up
+   at the top. */
+.card-clip-head { min-height: 38px; }
+
+/* A menu in a card, and the answer it produced.
+   
+   The gap between the two has to be larger than it looks like it needs
+   to be. A row of numbers set at nineteen points carries most of a line
+   of leading above the digits, so a box margin reads as roughly half
+   itself, and a gap that measures right on the ruler still has the
+   numbers sitting against the control that made them. */
+.card-control { margin-bottom: 28px; }
+.card-control .form-group { margin-bottom: 0; }
+.card-control .control-label,
+.card-control .form-group > label {
+  display: block;
+  margin-bottom: 10px;
+}
+.card-answer .stat-row + .helper-note { margin-top: 18px; }
+.card-answer .helper-note { margin-bottom: 0; }
+.card-answer .guard-note { margin: 0; }
+.card-clip .table-scroll { max-height: none; overflow: visible; }
+
+/* On a narrow screen the cards stack, so there is no row to keep even
+   and nothing to gain from cutting them off. */
+@media (max-width: 760px) {
+  .card-clip { height: auto; }
+  .card-clip::after { display: none; }
+}
+
+.table-block { margin: 0 0 6px; }
+.table-block + .table-block { margin-top: 18px; }
+.table-block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 8px;
+}
+.table-block-title {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.table-block-open { min-height: 36px; padding: 4px 12px; font-size: 13px; }
+.table-block-more { margin: 6px 0 0; font-size: 12.5px; }
+.table-block .btn-cluster { margin-top: 10px; }
+
+/* The full table sits in the markup so the open control has something
+   to read without another trip to the server. It is out of the flow and
+   out of the accessibility tree, not merely invisible, so a screen
+   reader does not read every table on the page twice. */
+.table-hidden { display: none; }
+.table-preview table { margin-bottom: 0; }
+
+.table-view {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.table-view-sheet {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  width: min(1180px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.table-view-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.table-view-head h2 { margin: 0; font-size: 19px; color: var(--text); }
+.table-view-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--seam);
+}
+.table-view-bar label {
+  display: block;
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.table-view-input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  min-height: 40px;
+}
+.table-view-search .table-view-input { width: 280px; max-width: 100%; }
+.table-view-actions { margin-left: auto; display: flex; gap: 10px; }
+.table-view-scroll { overflow: auto; padding: 0 20px; flex: 1 1 auto; }
+.table-view-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  border-top: 1px solid var(--seam);
+  color: var(--muted);
+  font-size: 13px;
+}
+.table-view-pager { display: flex; align-items: center; gap: 10px; }
+.table-view-position { font-variant-numeric: tabular-nums; }
+.table-view-table { width: 100%; }
+
+/* A sortable heading says so before it is used, and says which way it
+   is sorting after. The arrow is a character rather than a background
+   image so it survives every palette and both appearance modes without
+   a second asset. */
+.table-view-table th.sortable { cursor: pointer; user-select: none; }
+.table-view-table th.sortable:hover { color: var(--text); }
+.table-view-table th.sortable::after {
+  content: " \2195";
+  opacity: 0.35;
+}
+.table-view-table th.sorted-up::after { content: " \2191"; opacity: 1; }
+.table-view-table th.sorted-down::after { content: " \2193"; opacity: 1; }
+.table-view-table th.sortable:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---- Measures left out of a statistics run ---------------------------
+   A test that disappears without a word is read as a test that passed,
+   so anything the run declined to compute says so and says why. */
+
+.stat-skipped {
+  margin-top: 22px;
+  border-left: 3px solid var(--line);
+  padding: 2px 0 2px 14px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.stat-skipped h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.stat-skipped ul { margin: 0; padding-left: 18px; }
+.stat-skipped li { margin-bottom: 4px; }
+.stat-table-block { margin-top: 24px; }
+
+@media (max-width: 700px) {
+  .table-view { padding: 0; }
+  .table-view-sheet { border-radius: 0; height: 100%; width: 100%; }
+  .table-view-search .table-view-input { width: 100%; }
+  .table-view-actions { margin-left: 0; }
+}
+
+/* ---- The live layout control -----------------------------------------
+   It sits with the other map controls because it changes the view
+   rather than the analysis. A control that is running says so with a
+   fill as well as with its pressed state, since the pressed state is
+   only read aloud and the fill is what a person sees. */
+
+.map-live.on {
+  background: var(--accent);
+  color: var(--bg);
+}
+.map-live:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Each table inside an opened panel carries its own toolbar and its own
+   counter, so a panel holding a dyad table and a triad table gives each
+   of them a search box that searches that table and nothing else. */
+
+.table-view-one + .table-view-one { margin-top: 28px; }
+.table-view-one .table-view-bar { padding-left: 0; padding-right: 0; }
+.table-view-one .table-view-foot { padding-left: 0; padding-right: 0; }
+.table-view-scroll-inner { overflow-x: auto; }
+.table-view-content { padding-bottom: 8px; }
+.table-view-content h4 { color: var(--text); }
+
+/* ---- A person pinned in place ----------------------------------------
+   Dragging someone out of a knot only helps while the forces are
+   running. Pinning is how a reader says where someone belongs and has
+   it stay there, and a pin that cannot be seen is a pin a reader loses
+   track of, leaving an arrangement with parts that will not move for
+   reasons nobody remembers. */
+
+.node.held .mark {
+  stroke-dasharray: 3 2;
+  stroke-width: 2.4;
+}
+.node.held .node-label { font-weight: 600; }
+.map-spread:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* The model control on the statistics screen. A menu of what to ask for
+   beside the control that asks, since three things a reader might want
+   from the same findings is a choice rather than three buttons. */
+
+/* The file, then a rule, then the model control. Side by side they
+   read as one control, and they are not: one saves what is on the
+   screen and the other asks a program to write about it. */
+
+.stat-actions { margin-top: 26px; }
+.stat-rule {
+  border: 0;
+  border-top: 1px solid var(--seam);
+  margin: 26px 0 20px;
+}
+
+/* A download control is a link that Shiny gives button styling, and a
+   link is not a flex box, so the icon and the label sit on the text
+   baseline and the padding is applied to an inline box. That is what
+   made this one tall and left its label off center. Setting it out as a
+   flex box centers both axes and holds it to the same height as every
+   other control in the app. */
+.btn.shiny-download-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  height: 44px;
+  padding: 0 18px;
+  line-height: 1;
+}
+.btn.shiny-download-link i,
+.btn.shiny-download-link .fa { line-height: 1; }
+
+.stats-model-control { margin-top: 0; }
+.stats-model-control > label {
+  display: block;
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.stats-model-control .form-group { margin-bottom: 0; }
+.stats-model-control .btn-cluster { align-items: center; }
+.model-mode { background: transparent; border: 1px solid var(--line); }
+
+/* The range chance produced needs room for two numbers and the word
+   between them, so it takes two columns of the grid the other figures
+   sit in. */
+.stat-num.wide { grid-column: span 2; min-width: 150px; }
+.stat-numbers { align-items: start; }
+
+/* The band a result was placed in. Named as well as colored, since the
+   name is what the verdict says and the color is only a reminder. */
+.stat-card.band-fragile { border-left: 3px solid var(--focus); }
+
+.stats-caveat {
+  margin-top: 30px;
+  border-top: 1px solid var(--seam);
+  padding-top: 18px;
+}
+.stats-caveat h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.stats-caveat .caveat { margin-bottom: 10px; }

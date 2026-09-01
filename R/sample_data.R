@@ -125,16 +125,187 @@ sample_referral_network <- function() {
 # built in interpretation covers everything. When a local Ollama server is
 # running, this asks it to restate the computed summary in its own words,
 # with the numbers passed in so the model cannot invent new ones.
-rewrite_with_local_model <- function(paragraphs, base_url, model) {
+# Two directed samples, added so the dyad and triad census has something
+# to work on. Both are the same size and shape family as the undirected
+# samples, and they differ from each other in exactly the way the census
+# measures, which is the point of having two.
+#
+# The census counts how often a tie is returned. In an advice network
+# almost none are: people ask upward and answers come back as advice
+# rather than as a matching question, so the dyad census is mostly
+# asymmetric and the triads lean toward the transitive classes. In a
+# messaging network most ties are returned, so the same census comes
+# back mostly mutual. Reading the two side by side is the fastest way to
+# see what the census is actually telling you.
+#
+# Direction is carried on the edge table as an attribute rather than as
+# a fourth column, because the file format a reader brings has three
+# columns and this is a property of the whole network rather than of any
+# one tie.
+mark_directed <- function(ed) {
+  attr(ed, "directed") <- TRUE
+  ed
+}
+
+# Who asks whom for advice in a mid sized department. Ties run from the
+# person asking to the person asked, so the senior people accumulate
+# incoming ties and return very few.
+sample_advice_network <- function() {
+  seniors <- c("Rosa", "Idris", "Meera")
+  leads <- c("Tomas", "Yara", "Owen", "Bess")
+  staff <- c("Kian", "Lucia", "Petra", "Sven", "Aditi", "Marco",
+             "Freya", "Noor", "Emil", "Talia", "Jonas", "Rhea")
+
+  set.seed(19)
+  # Staff ask their lead, and about a third also ask a second lead,
+  # which is what puts any structure in the picture at all.
+  from <- character(0)
+  to <- character(0)
+  for (i in seq_along(staff)) {
+    lead <- leads[[(i - 1) %% length(leads) + 1]]
+    from <- c(from, staff[i])
+    to <- c(to, lead)
+    if (runif(1) < 0.35) {
+      other <- sample(setdiff(leads, lead), 1)
+      from <- c(from, staff[i])
+      to <- c(to, other)
+    }
+    # A few go straight to a senior, skipping their lead.
+    if (runif(1) < 0.25) {
+      from <- c(from, staff[i])
+      to <- c(to, sample(seniors, 1))
+    }
+  }
+  # Leads ask seniors, and seniors ask each other, which is the only
+  # place mutual ties appear.
+  for (lead in leads) {
+    from <- c(from, lead, lead)
+    to <- c(to, seniors[[1]], sample(seniors[-1], 1))
+  }
+  from <- c(from, "Rosa", "Idris", "Meera")
+  to <- c(to, "Idris", "Rosa", "Rosa")
+  # A handful of staff ask each other sideways.
+  sideways <- sample(staff, 8)
+  from <- c(from, sideways[1:4])
+  to <- c(to, sideways[5:8])
+
+  mark_directed(tibble(from = from, to = to,
+                       weight = rep(1, length(from))))
+}
+
+# Who messages whom in the same department. Most conversations go both
+# ways, so this network is mutual where the advice network is
+# asymmetric, on a cast of the same size.
+sample_message_network <- function() {
+  people <- c("Rosa", "Idris", "Meera", "Tomas", "Yara", "Owen", "Bess",
+              "Kian", "Lucia", "Petra", "Sven", "Aditi", "Marco",
+              "Freya", "Noor", "Emil", "Talia", "Jonas", "Rhea")
+  set.seed(23)
+  from <- character(0)
+  to <- character(0)
+  for (i in seq_along(people)) {
+    partners <- sample(setdiff(people, people[i]),
+                       sample(2:4, 1))
+    for (partner in partners) {
+      from <- c(from, people[i])
+      to <- c(to, partner)
+      # Four in five conversations are answered, which is what makes
+      # the dyad census come back mostly mutual.
+      if (runif(1) < 0.8) {
+        from <- c(from, partner)
+        to <- c(to, people[i])
+      }
+    }
+  }
+  mark_directed(tibble(from = from, to = to,
+                       weight = rep(1, length(from))))
+}
+
+# What a reader can ask a local model to do with a set of findings.
+#
+# One button that always does the same thing is the wrong shape for
+# this. A reader looking at a page of proportions wants one of three
+# things, and which one depends on why they came: the results in plain
+# words, the paragraph they would write in a paper, or the objection a
+# reviewer is going to raise. Each is a different instruction, and none
+# of them is a different set of numbers.
+#
+# Every mode is bound by the same rules about the numbers. The model
+# rewords findings; it never computes, never adds a claim, and never
+# sees the network.
+model_modes <- function() {
+  list(
+    plain = list(
+      label = "In plain words",
+      task = paste(
+        "Write what these findings say about this particular network,",
+        "for someone who does not know the vocabulary. Lead with what",
+        "was actually found here and what it would mean for the people",
+        "in it. Name the measures in ordinary words rather than by",
+        "their technical names. Three or four short paragraphs.")),
+    methods = list(
+      label = "As a methods paragraph",
+      task = paste(
+        "Write the paragraph a researcher would put in the methods and",
+        "results section of a paper about this network. Say what was",
+        "compared against what, report the results that were beyond",
+        "chance and say plainly that the rest were not, and use the",
+        "past tense. One or two paragraphs.")),
+    caution = list(
+      label = "What to be careful about",
+      task = paste(
+        "Write what a careful reviewer would say about these results.",
+        "Work from the findings themselves: which results sit close to",
+        "the edge, which rest on one person, which could not be",
+        "computed, and which are being read as more than they are.",
+        "End with the limits of the method itself: it compares one",
+        "network against random ones, so it says nothing about cause",
+        "and nothing about change over time. Three or four short",
+        "paragraphs."))
+  )
+}
+
+rewrite_with_local_model <- function(paragraphs, base_url, model,
+                                     mode = "plain") {
   if (!requireNamespace("curl", quietly = TRUE)) {
     return(list(ok = FALSE,
                 message = "The curl package is not installed, so the local model connection is unavailable."))
   }
+  modes <- model_modes()
+  task <- if (!is.null(modes[[mode]])) {
+    modes[[mode]]$task
+  } else {
+    modes$plain$task
+  }
+  # The instructions are specific about shape as well as about content.
+  # Asking only for a restatement produced one unbroken block opening
+  # with a sentence announcing that a restatement follows, which is the
+  # model talking about its work rather than doing it.
   prompt <- paste(
-    "Restate the following network summary in plain, calm English for a",
-    "general business reader. Keep every number exactly as given. Do not",
-    "add claims that are not in the text. Keep the hedged tone.",
-    "", paste(paragraphs, collapse = "\n\n"), sep = "\n")
+    "Below is a description of one network and what was found about it.",
+    "Each finding already says what this network has, what random",
+    "networks produced, and what the difference amounts to.",
+    task,
+    "Rules, all of them strict:",
+    "1. Write about this network. Every paragraph has to say something",
+    "   that is true of it in particular and would be false of a",
+    "   different network. A sentence that would fit any network at all",
+    "   is a sentence to cut.",
+    "2. Do not list the measures one after another with their numbers.",
+    "   That list is already on the reader's screen and repeating it is",
+    "   the one thing this is not for. Group the findings that point",
+    "   the same way and say what they add up to.",
+    "3. Use at most four numbers in the whole piece, and only where a",
+    "   number carries the point. Keep any you use exactly as given.",
+    "4. Say plainly which findings were beyond chance and which were",
+    "   not. A result inside the range chance produces is a real",
+    "   answer, not a missing one, and most results here will be that.",
+    "5. Add no claim that is not in the findings. Never say what caused",
+    "   anything: this is one snapshot of recorded ties.",
+    "6. Separate paragraphs with a blank line. Start with the first",
+    "   sentence itself. Do not introduce it, do not describe what you",
+    "   are about to do, and do not summarize what you did.",
+    "", paste(paragraphs, collapse = "\n"), sep = "\n")
   body <- jsonlite::toJSON(list(model = model, prompt = prompt,
                                 stream = FALSE), auto_unbox = TRUE)
   h <- curl::new_handle()
@@ -152,5 +323,17 @@ rewrite_with_local_model <- function(paragraphs, base_url, model) {
     return(list(ok = FALSE,
                 message = "The local model answered in a form this app could not read."))
   }
-  list(ok = TRUE, text = parsed$response)
+  # Models ignore the no preamble rule often enough that it is worth
+  # removing one anyway. A first paragraph that announces a restatement
+  # rather than being one ends in a colon and mentions the task, which
+  # is a narrow enough shape to strip without touching real content.
+  text <- trimws(parsed$response)
+  first_break <- regexpr("\n\\s*\n", text)
+  if (first_break > 0) {
+    opening <- substr(text, 1, first_break - 1)
+    announces <- grepl(":\\s*$", opening) &&
+      grepl("restat|summar|plain|rewritt", opening, ignore.case = TRUE)
+    if (announces) text <- trimws(substr(text, first_break, nchar(text)))
+  }
+  list(ok = TRUE, text = text)
 }

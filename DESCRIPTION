@@ -1,6 +1,6 @@
 Package: tessera
 Title: Social Network Analysis Dashboard
-Version: 0.15.0
+Version: 0.25.0
 Authors@R: 
     person("Abhik", "Roy", role = c("aut", "cre"))
 Description: A Shiny application for social network analysis. Turns an
@@ -8,7 +8,8 @@ Description: A Shiny application for social network analysis. Turns an
     panel for general readers, and a research tier with extended
     centralities, a choice of community detection algorithms, global
     diagnostics, dyad and triad census, and reproducible script export.
-    All computation is local.
+    A statistics tier compares the observed network against random
+    networks under two null models. All computation is local.
 License: file LICENSE.md
 Encoding: UTF-8
 Imports:
@@ -25,4 +26,5 @@ Imports:
     tidygraph,
     tidyr
 Suggests:
-    curl
+    curl,
+    parallel

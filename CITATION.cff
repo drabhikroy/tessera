@@ -12,8 +12,10 @@ abstract: >-
   Classical, transparent graph methods turn a list of ties between people
   into an interactive map, with plain language readings for general users
   and full statistics for researchers, including extended centralities,
-  a choice of community detection algorithms, global diagnostics, and the
-  dyad and triad census. An optional language model running on the same
+  a choice of community detection algorithms, global diagnostics, the
+  dyad and triad census, and conditional uniform graph tests that ask
+  whether an observed pattern exceeds what a network of the same size
+  and density would produce on its own. An optional language model running on the same
   machine adds interpretation without changing any number.
 keywords:
   - social network analysis
@@ -24,5 +26,5 @@ keywords:
   - Shiny
   - program evaluation
 license: PolyForm-Noncommercial-1.0.0
-version: 0.15.0
-date-released: "2026-07-23"
+version: 0.25.0
+date-released: "2026-08-31"

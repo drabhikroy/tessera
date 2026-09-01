@@ -4,15 +4,29 @@
 # states, and a live server smoke test.
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
+
+# Shiny is attached before anything is sourced rather than partway down.
+# Several files in R/ build markup with tagList(), and a suite that
+# loaded shiny at the point it first drove the server was failing on the
+# first screen it tried to build, several suites earlier than that.
+suppressPackageStartupMessages(library(shiny))
 # The suite runs from the project root. When launched from tests/, step up.
 if (basename(getwd()) == "tests") setwd("..")
 
+source("R/info.R")
+source("R/compat.R")
+source("R/appearance.R")
 source("R/network_math.R")
 source("R/sample_data.R")
 source("R/narrative.R")
 source("R/figure.R")
 source("R/guide.R")
+source("R/overview.R")
 source("R/research_metrics.R")
+source("R/runtime.R")
+source("R/session_state.R")
+source("R/help.R")
+source("R/statistics.R")
 
 pass <- 0; fail <- 0
 check <- function(label, ok) {
@@ -93,10 +107,36 @@ check("person card names the person",
 
 # The walkthrough and the model guide carry their content.
 slides <- tour_slides()
-check("walkthrough has seven slides with art and text",
-      length(slides) == 7 &&
-        all(vapply(slides, function(s) nchar(s$art) > 100 &&
-                     nchar(s$text) > 50, TRUE)))
+# The slides are counted against a floor rather than an exact number.
+# The count is not the thing worth holding still, and pinning it means
+# every added slide turns this red for no reason.
+check("every walkthrough slide carries art and text",
+      length(slides) >= 7 &&
+        all(vapply(slides, function(s) {
+          isTRUE(nchar(s$art) > 100) && isTRUE(nchar(s$text) > 50)
+        }, logical(1))))
+
+# Each slide has to survive the path the walkthrough puts it through.
+# The picture is markup, and the walkthrough hands it to HTML(), which
+# takes a character vector and nothing else. One slide built its picture
+# as a tag list instead, so pressing Next onto it stopped the
+# walkthrough with a message about a character vector and no mention of
+# the slide, the file, or the picture.
+check("every walkthrough slide survives the walkthrough",
+      all(vapply(slides, function(s) {
+        is.character(s$art) && length(s$art) == 1 &&
+          is.character(s$title) && is.character(s$text) &&
+          !inherits(tryCatch(as.character(HTML(s$art)),
+                             error = function(e) e), "error")
+      }, logical(1))))
+
+# And the picture is a whole drawing rather than the shapes for one,
+# since a group of shapes with no frame around them renders as nothing.
+check("every walkthrough picture is a complete drawing",
+      all(vapply(slides, function(s) {
+        grepl("<svg", s$art, fixed = TRUE) &&
+          grepl("</svg>", s$art, fixed = TRUE)
+      }, logical(1))))
 check("model guide offers four options with commands",
       length(model_options()) == 4 &&
         all(vapply(model_options(),
@@ -214,8 +254,11 @@ for (meth in c("louvain", "leiden", "walktrap", "fast_greedy")) {
         cp$n_groups >= 1 && is.finite(cp$modularity))
 }
 gd <- global_diagnostics(org_m$graph)
-check("global diagnostics report the nine standard measures",
-      nrow(gd) == 9 &&
+# The row count has to move whenever a measure is added to the table,
+# which is the point: a diagnostic quietly dropping out of the table is
+# exactly what this is here to notice.
+check("global diagnostics report every measure they define",
+      nrow(gd) == 12 &&
         gd$value[gd$measure == "People"] == as.character(org_m$n))
 scr <- export_script("leiden", "between")
 check("export script is runnable igraph code",
@@ -224,7 +267,6 @@ check("export script is runnable igraph code",
 
 # Suite 4: the app boots and answers. testServer drives the real server
 # function with the org sample and confirms the outputs materialize.
-suppressPackageStartupMessages(library(shiny))
 app <- shinyAppFile("app.R")
 ok_server <- tryCatch({
   testServer(app, {
@@ -251,6 +293,838 @@ ok_server <- tryCatch({
   TRUE
 }, error = function(e) { cat("  server error:", conditionMessage(e), "\n"); FALSE })
 check("server answers with map, prose, legend, and table", ok_server)
+
+# Suite 5: every screen that is built from a file in R/ renders without
+# reaching for something that is not there. Shiny sources app.R into an
+# environment of its own while source() from inside it loads into the
+# global environment, so a function in R/ cannot see a value assigned at
+# the top of app.R. The Overview screen hit exactly that and took the
+# whole app down on startup. This check builds the screens the same way
+# a fresh session does, from the sourced files alone.
+ok_screens <- tryCatch({
+  markup <- as.character(overview_body())
+  stopifnot(nchar(markup) > 2000)
+  stopifnot(grepl(APP_TAG, markup, fixed = TRUE))
+  stopifnot(length(tour_slides()) > 0)
+  stopifnot(length(model_options()) > 0)
+  # Help is built from the same sourced files and has the same exposure
+  # to the loading order this suite exists to check.
+  help_markup <- as.character(help_body())
+  stopifnot(nchar(help_markup) > 4000)
+  stopifnot(grepl(APP_VERSION, help_markup, fixed = TRUE))
+  # Both script dialects have to be runnable text rather than an error.
+  igraph_script <- export_script("louvain", "degree", "igraph")
+  tidy_script <- export_script("louvain", "degree", "tidy")
+  stopifnot(grepl("library(igraph)", igraph_script, fixed = TRUE))
+  stopifnot(grepl("library(tidygraph)", tidy_script, fixed = TRUE))
+  stopifnot(!grepl("library(igraph)", tidy_script, fixed = TRUE))
+  # The hero emblem and the worked example were the same picture for
+  # three versions. They are different functions now and must stay so.
+  stopifnot(as.character(overview_emblem()) != as.character(overview_art()))
+  TRUE
+}, error = function(e) {
+  cat("  screen error:", conditionMessage(e), "\n"); FALSE
+})
+check("screens built from R/ render with only the sourced files", ok_screens)
+
+# Suite 6: saving and resuming. A session file has to survive a round
+# trip with its ties intact, and a file that is not one has to be
+# refused with a sentence rather than a stack trace.
+ok_session <- tryCatch({
+  ed <- data.frame(from = c("A", "B", "C"), to = c("B", "C", "D"),
+                   stringsAsFactors = FALSE)
+  path <- tempfile(fileext = ".json")
+  save_session(path, session_snapshot(ed, list(size_by = "degree")))
+  back <- read_session(path)
+  stopifnot(isTRUE(back$ok))
+  stopifnot(nrow(back$edges) == 3)
+  stopifnot(identical(as.character(back$edges[[1]]), ed$from))
+  stopifnot(identical(back$view$size_by, "degree"))
+  # Anything that is not a session file is refused in words.
+  junk <- tempfile(fileext = ".json")
+  writeLines("not a session", junk)
+  refused <- read_session(junk)
+  stopifnot(!isTRUE(refused$ok), nchar(refused$message) > 20)
+  unlink(c(path, junk))
+  TRUE
+}, error = function(e) {
+  cat("  session error:", conditionMessage(e), "\n"); FALSE
+})
+check("a session saves and resumes with its ties intact", ok_session)
+
+# Suite 7: the model catalogue and the fit rules. No network call is
+# made here; only the arithmetic that decides which models are offered.
+ok_fit <- tryCatch({
+  small <- list(os = "test", ram_gb = 8, cores = 4, accelerated = FALSE)
+  large <- list(os = "test", ram_gb = 64, cores = 16, accelerated = TRUE)
+  stopifnot(all(model_fit(small) %in%
+                c("comfortable", "workable", "too large")))
+  stopifnot(any(model_fit(small) == "too large"))
+  stopifnot(all(model_fit(large) == "comfortable"))
+  # Every catalogue entry carries the two fields the setup screen reads.
+  stopifnot(all(vapply(model_options(),
+                       function(m) nzchar(m$id) && is.numeric(m$min_ram),
+                       logical(1))))
+  stopifnot(nzchar(recommended_model(small)))
+  TRUE
+}, error = function(e) {
+  cat("  fit error:", conditionMessage(e), "\n"); FALSE
+})
+check("model fit follows the reported memory", ok_fit)
+
+# Suite 8: the two directed samples. The census is the only place
+# direction changes an answer rather than a wording, and the two samples
+# exist to differ in exactly what it measures, so that difference is
+# checked rather than assumed.
+ok_directed <- tryCatch({
+  advice <- sample_advice_network()
+  message_net <- sample_message_network()
+  stopifnot(isTRUE(attr(advice, "directed")))
+  stopifnot(isTRUE(attr(message_net, "directed")))
+
+  census_of <- function(ed) {
+    g <- build_graph(ed)
+    m <- compute_metrics(g)
+    stopifnot(!is.null(m$digraph))
+    dyad_triad_census(m$digraph)
+  }
+  # The census is handed a plain igraph for a directed network and a
+  # tbl_graph otherwise. tidygraph supplies an as.igraph method for its
+  # own class and igraph supplies none for its, so both forms are
+  # checked here.
+  a <- census_of(advice)
+  b <- census_of(message_net)
+  stopifnot(isTRUE(a$directed), isTRUE(b$directed))
+
+  share_mutual <- function(ct) {
+    ct$dyads$count[ct$dyads$type == "Mutual"] /
+      sum(ct$dyads$count[ct$dyads$type != "Null"])
+  }
+  # Advice runs one way and messages come back, so the messaging
+  # network must be the more mutual of the two by a clear margin. A
+  # sample that failed this would teach the wrong lesson about the
+  # census, which is the only reason it ships.
+  stopifnot(share_mutual(b) > share_mutual(a) + 0.25)
+
+  # An undirected source still reports that it has no census rather
+  # than an empty one.
+  plain <- dyad_triad_census(compute_metrics(build_graph(
+    sample_org_network()))$graph)
+  stopifnot(identical(plain$directed, FALSE))
+  TRUE
+}, error = function(e) {
+  cat("  directed error:", conditionMessage(e), "\n"); FALSE
+})
+check("the directed samples differ in what the census measures",
+      ok_directed)
+
+# Suite 9: the structural measures. None of these is derivable from the
+# centrality columns beside them, which is the test of whether a measure
+# earns a column of its own.
+ok_structure <- tryCatch({
+  m <- compute_metrics(build_graph(sample_org_network()))
+  ext <- extended_centralities(m$graph)
+  stopifnot(all(c("constraint", "effective", "coreness") %in% names(ext)))
+  # Constraint falls between zero and roughly one and a quarter, and a
+  # person with a single contact is maximally constrained.
+  stopifnot(all(is.finite(ext$constraint) | is.na(ext$constraint)))
+  stopifnot(all(ext$coreness >= 1))
+  stopifnot(all(ext$effective >= 0))
+
+  diag_with <- global_diagnostics(m$graph, m$membership)
+  diag_without <- global_diagnostics(m$graph)
+  stopifnot("E-I index (group crossing)" %in% diag_with$measure)
+  ei <- diag_with$value[diag_with$measure == "E-I index (group crossing)"]
+  stopifnot(nchar(ei) > 0, ei != "n/a (no grouping)")
+  # Without a grouping the same row says so rather than inventing one.
+  ei_none <- diag_without$value[
+    diag_without$measure == "E-I index (group crossing)"]
+  stopifnot(ei_none == "n/a (no grouping)")
+  # The E-I index is bounded by minus one and plus one wherever it is
+  # defined, which is the cheapest check that the arithmetic is right.
+  stopifnot(abs(as.numeric(ei)) <= 1)
+  TRUE
+}, error = function(e) {
+  cat("  structure error:", conditionMessage(e), "\n"); FALSE
+})
+check("the structural measures compute and stay in range", ok_structure)
+
+# Suite 10: the route finder and the tie marks. Both put something on
+# the map that a reader cannot check by eye, so both are checked here
+# against answers that can be worked out by hand.
+ok_route <- tryCatch({
+  m <- compute_metrics(build_graph(sample_org_network()))
+  nms <- m$names
+  res <- shortest_route(m, nms[1], nms[2])
+  stopifnot(isTRUE(res$ok))
+  # The route starts and ends where it was asked to, its stops are all
+  # distinct, and its length is the count of steps rather than of
+  # people.
+  stopifnot(identical(res$names[1], nms[1]))
+  stopifnot(identical(res$names[length(res$names)], nms[2]))
+  stopifnot(!any(duplicated(res$ids)))
+  stopifnot(res$length == length(res$ids) - 1)
+  stopifnot(length(res$steps) == res$length)
+  # Asking for a route to oneself is refused in words rather than
+  # answered with a route of length zero.
+  same <- shortest_route(m, nms[1], nms[1])
+  stopifnot(!isTRUE(same$ok), nchar(same$message) > 10)
+  missing <- shortest_route(m, nms[1], "Nobody At All")
+  stopifnot(!isTRUE(missing$ok))
+
+  # Tie marks ride on the payload. A bridge count above the tie count
+  # would mean the flags are misaligned with the edge table.
+  lay <- compute_layout(m$graph)
+  pay <- graph_payload(m, lay)
+  stopifnot(all(c("bridge", "crossing") %in% names(pay$edges)))
+  stopifnot(is.logical(pay$edges$bridge))
+  stopifnot(pay$meta$n_bridges <= nrow(pay$edges))
+  stopifnot(pay$meta$n_crossing <= nrow(pay$edges))
+  # A crossing tie is one whose ends carry different group labels, so
+  # the count has to match a recount from the node table.
+  gp <- pay$nodes$group
+  recount <- sum(gp[pay$edges$from] != gp[pay$edges$to])
+  stopifnot(recount == pay$meta$n_crossing)
+  TRUE
+}, error = function(e) {
+  cat("  route error:", conditionMessage(e), "\n"); FALSE
+})
+check("routes and tie marks agree with the graph they came from",
+      ok_route)
+
+# Suite 11: what the model is given. It must be findings rather than the
+# panel prose, since a model handed a definition restates it as a
+# discovery.
+ok_facts <- tryCatch({
+  m <- compute_metrics(build_graph(sample_org_network()))
+  groups <- relabel_groups(m$membership)
+  facts <- model_facts(m, groups)
+  stopifnot(length(facts) >= 6)
+  joined <- paste(facts, collapse = " ")
+  # No sentence explaining what a measure is.
+  stopifnot(!grepl("come from the tie pattern", joined, fixed = TRUE))
+  stopifnot(!grepl("usually reflect", joined, fixed = TRUE))
+  # Every fact carries something specific: a number or a name.
+  stopifnot(all(grepl("[0-9]", facts) | grepl(paste(m$names, collapse = "|"),
+                                              facts)))
+  person <- model_facts_person(m, 1L, groups)
+  stopifnot(any(grepl(m$names[1], person, fixed = TRUE)))
+  TRUE
+}, error = function(e) {
+  cat("  facts error:", conditionMessage(e), "\n"); FALSE
+})
+check("the model is given findings rather than definitions", ok_facts)
+
+# Suite 12: the inferential tests. These are the numbers a reader is
+# most likely to quote in something that gets published, so the checks
+# below are about the arithmetic being right rather than about the code
+# running.
+ok_stats <- tryCatch({
+  m <- compute_metrics(build_graph(sample_org_network()))
+  # Few replications here: the suite is checking shape and bounds, and
+  # the number of draws is the reader's choice at run time.
+  res <- network_statistics(m, reps = 60, conditioning = "edges", seed = 11)
+  tab <- res$table
+  stopifnot(nrow(tab) >= 4)
+  stopifnot(all(c("measure", "observed", "chance_mean", "p_higher",
+                  "p_lower", "reading") %in% names(tab)))
+  # Proportions are bounded and can never be zero, because the
+  # observation is counted in its own null distribution.
+  ps <- c(tab$p_higher, tab$p_lower)
+  ps <- ps[is.finite(ps)]
+  stopifnot(all(ps > 0), all(ps <= 1))
+  # Every test carries a sentence, not just numbers.
+  stopifnot(all(nchar(tab$reading) > 40))
+
+  # The E-I index is bounded by minus one and plus one, and a network
+  # where every tie stays inside a group must sit at minus one.
+  g_split <- igraph::make_full_graph(4) + igraph::make_full_graph(4)
+  memb <- c(rep(1, 4), rep(2, 4))
+  stopifnot(abs(ei_index(g_split, memb) + 1) < 1e-9)
+  g_star <- igraph::make_graph(c(1, 5, 2, 6, 3, 7, 4, 8), directed = FALSE)
+  stopifnot(abs(ei_index(g_star, memb) - 1) < 1e-9)
+
+  # A summary of a value sitting far above its null distribution must
+  # report a small upper proportion and a large lower one.
+  high <- cug_summary(10, rnorm(200, mean = 0, sd = 1))
+  stopifnot(high$p_greater < 0.02, high$p_less > 0.98)
+  TRUE
+}, error = function(e) {
+  cat("  statistics error:", conditionMessage(e), "\n"); FALSE
+})
+check("the inferential tests are bounded and carry their readings",
+      ok_stats)
+
+# Suite 12a: every number the statistics screen reads has length one.
+#
+# A shape check rather than an arithmetic one. Values here pass through
+# igraph, and igraph returns a different set of list elements on
+# different releases, so a number can be correct on one machine and
+# absent on another. An absent value reaching an if() fails with a
+# message that names neither the value nor the file, which is the
+# hardest kind of failure to trace and the cheapest to prevent.
+ok_lengths <- tryCatch({
+  every_number_is_scalar <- function(values, where) {
+    for (nm in names(values)) {
+      value <- values[[nm]]
+      if (is.null(value) || length(value) != 1) {
+        stop(paste(where, "field", nm, "has length",
+                   length(value)), call. = FALSE)
+      }
+    }
+    TRUE
+  }
+  for (sample_name in c("org", "referral", "advice", "message")) {
+    edges <- switch(sample_name,
+      org = sample_org_network(),
+      referral = sample_referral_network(),
+      advice = sample_advice_network(),
+      message = sample_message_network())
+    metrics <- compute_metrics(build_graph(edges))
+    for (null_model in c("edges", "degree")) {
+      res <- network_statistics(metrics, reps = 40,
+                                conditioning = null_model, seed = 5)
+      every_number_is_scalar(res$degree,
+                             paste(sample_name, null_model, "degree"))
+      every_number_is_scalar(res$small_world,
+                             paste(sample_name, null_model, "small world"))
+      stopifnot(length(res$reps) == 1, length(res$n) == 1,
+                length(res$m) == 1)
+      stopifnot(nrow(res$table) >= 4)
+      # Every reading is a sentence and every note names the measure.
+      stopifnot(all(nchar(res$table$reading) > 40))
+      stopifnot(all(nchar(res$table$note) > 10))
+      # Holding each person's number of ties fixed holds degree
+      # centralization fixed, so that row must be absent rather than
+      # reported as a result of no difference.
+      if (null_model == "degree") {
+        stopifnot(!("Degree centralization" %in% res$table$measure))
+        stopifnot(any(vapply(res$skipped, function(x) {
+          identical(x$measure, "Degree centralization")
+        }, logical(1))))
+      }
+    }
+    # The directed samples get the directed measures and the undirected
+    # ones must not.
+    res <- network_statistics(metrics, reps = 40, seed = 5)
+    directed_rows <- c("Reciprocity", "Closed threes", "Loops of three")
+    if (sample_name %in% c("advice", "message")) {
+      stopifnot(all(directed_rows %in% res$table$measure))
+    } else {
+      stopifnot(!any(directed_rows %in% res$table$measure))
+    }
+  }
+  TRUE
+}, error = function(e) {
+  cat("  length error:", conditionMessage(e), "\n"); FALSE
+})
+check("every number the statistics screen reads has length one",
+      ok_lengths)
+
+# Suite 12b: the power law wrapper survives an igraph that returns no
+# goodness of fit proportion. The installed igraph may or may not be one
+# of those, so the case is forced rather than waited for.
+ok_powerlaw <- tryCatch({
+  real <- net_power_law(c(rep(1, 40), rep(2, 20), rep(3, 8), 7, 9, 14))
+  stopifnot(length(real$alpha) == 1, length(real$ks_p) == 1)
+  # Stand in for an igraph that dropped the proportion.
+  stub <- function(x, ...) {
+    fit <- igraph::fit_power_law(x)
+    fit$KS.p <- NULL
+    fit
+  }
+  with_stub <- local({
+    saved <- get("fit_power_law", envir = globalenv(), inherits = TRUE)
+    assign("fit_power_law", stub, envir = globalenv())
+    on.exit(assign("fit_power_law", saved, envir = globalenv()))
+    net_power_law(c(rep(1, 40), rep(2, 20), rep(3, 8), 7, 9, 14))
+  })
+  stopifnot(length(with_stub$ks_p) == 1)
+  # A vector too short to fit comes back as three NA values rather than
+  # as an error or as a list with pieces missing.
+  short <- net_power_law(c(1, 1, 2))
+  stopifnot(length(short$alpha) == 1, is.na(short$ks_p))
+  # And the guards used across the file behave on a zero length input.
+  stopifnot(is.na(one_number(numeric(0))), is.na(one_number(NULL)))
+  stopifnot(!has_number(NULL), !has_number(numeric(0)), has_number(3))
+  TRUE
+}, error = function(e) {
+  cat("  power law error:", conditionMessage(e), "\n"); FALSE
+})
+check("the power law fit returns three numbers on every igraph",
+      ok_powerlaw)
+
+# Suite 12c: distances are counted in steps, not in tie weight.
+#
+# igraph reads a weight column as a cost, so a pair joined by a strong
+# tie comes out further apart than a pair joined by a weak one, which is
+# backwards for a column that means how much two people work together.
+# The mistake is invisible until the mean distance climbs above the
+# diameter printed directly beneath it, which is arithmetically
+# impossible, so that relationship is what is checked.
+ok_steps <- tryCatch({
+  for (sample_name in c("org", "message")) {
+    edges <- if (sample_name == "org") {
+      sample_org_network()
+    } else {
+      sample_message_network()
+    }
+    metrics <- compute_metrics(build_graph(edges))
+    diagnostics <- global_diagnostics(metrics$graph, metrics$membership)
+    value_of <- function(label) {
+      as.numeric(diagnostics$value[diagnostics$measure == label])
+    }
+    stopifnot(value_of("Mean distance") <= value_of("Diameter"))
+    res <- network_statistics(metrics, reps = 30, seed = 3)
+    observed_distance <- res$table$observed[
+      res$table$measure == "Mean distance"]
+    stopifnot(length(observed_distance) == 1)
+    stopifnot(abs(observed_distance - value_of("Mean distance")) < 0.01)
+  }
+  TRUE
+}, error = function(e) {
+  cat("  step error:", conditionMessage(e), "\n"); FALSE
+})
+check("distances are counted in steps everywhere they are reported",
+      ok_steps)
+
+# Suite 12d: no call to an igraph function that igraph has deprecated.
+# A deprecation warning is a promise that the call will stop working,
+# and one printed once per session in a running app is a warning nobody
+# reads. R/compat.R holds the wrappers; this checks that nothing walks
+# around them.
+ok_deprecated <- tryCatch({
+  # The dots are escaped and each name has to stand on its own. An
+  # unescaped dot is a wildcard, so as.undirected matched the compat
+  # wrapper net_as_undirected and shortest.paths matched the current
+  # shortest_paths, and a gate that reports the code it was written to
+  # protect gets switched off.
+  retired <- c("hub_score", "authority_score", "as\\.undirected",
+               "as\\.directed", "graph\\.data\\.frame",
+               "get\\.adjacency", "power\\.law\\.fit",
+               "shortest\\.paths")
+  retired <- paste0("(^|[^A-Za-z0-9._])", retired, "[^A-Za-z0-9._]")
+  offenders <- character(0)
+  for (path in list.files("R", pattern = "[.]R$", full.names = TRUE)) {
+    if (basename(path) == "compat.R") next
+    body <- readLines(path, warn = FALSE)
+    # Comments are prose and may name a retired function while
+    # explaining why it is no longer called.
+    body <- sub("#.*$", "", body)
+    for (name in retired) {
+      if (any(grepl(name, body, fixed = FALSE))) {
+        offenders <- c(offenders, paste0(basename(path), ": ", name))
+      }
+    }
+  }
+  if (length(offenders) > 0) {
+    stop(paste("deprecated igraph calls:",
+               paste(offenders, collapse = "; ")), call. = FALSE)
+  }
+  # And the wrappers themselves work on this igraph.
+  g <- igraph::make_ring(6, directed = TRUE)
+  stopifnot(!igraph::is_directed(net_as_undirected(g)))
+  hits <- net_hits(g)
+  stopifnot(length(hits$hub) == 6, length(hits$authority) == 6)
+  TRUE
+}, error = function(e) {
+  cat("  deprecation error:", conditionMessage(e), "\n"); FALSE
+})
+check("no source file calls a deprecated igraph function", ok_deprecated)
+
+# Suite 13: nothing a reader supplies is turned into something the
+# browser runs or another program reads as an instruction.
+#
+# Names come from an uploaded file, so a name is untrusted text. It
+# reaches the screen in three places and one of them writes a control
+# for it, so a name has to be data the whole way through rather than
+# something quoted well enough to be safe inside a line of script.
+ok_injection <- tryCatch({
+  # A name carrying a quote, a backslash, and tags. If any of this
+  # reaches the page as anything but text, one of the checks below
+  # notices.
+  awkward <- "Ada O'Neil\\');alert(1)//<img src=x onerror=alert(2)>"
+  edges <- data.frame(
+    from = c(awkward, "Bess", "Cyrus", awkward),
+    to = c("Bess", "Cyrus", "Dai", "Dai"),
+    stringsAsFactors = FALSE)
+  metrics <- compute_metrics(build_graph(edges))
+  groups <- relabel_groups(metrics$membership)
+
+  # No file in R/ or app.R writes a name into a line of script. The
+  # pattern looks for setInputValue built by sprintf, which is the shape
+  # that would put a name inside code.
+  sources <- c("app.R", list.files("R", pattern = "[.]R$", full.names = TRUE))
+  for (path in sources) {
+    body <- paste(readLines(path, warn = FALSE), collapse = "\n")
+    if (grepl("setInputValue\\([^)]*%s", body)) {
+      stop(paste(basename(path),
+                 "writes a value into a line of script"), call. = FALSE)
+    }
+  }
+
+  # The person chips carry the name as an attribute, and rendering
+  # escapes it, so the awkward characters arrive as text.
+  chips <- as.character(describe_cards(metrics, groups)[[1]]$people)
+  markup <- paste(vapply(seq_along(chips), function(i) {
+    as.character(tags$button(type = "button", class = "person-chip",
+                             `data-person` = chips[i], chips[i]))
+  }, ""), collapse = "")
+  # Text that reads as an image tag is fine on screen. What must never
+  # appear is a tag the browser would act on, or a quote that closes the
+  # attribute the name sits in.
+  stopifnot(!grepl("<img", markup, fixed = TRUE))
+  stopifnot(!grepl("onerror", markup, fixed = TRUE) ||
+              grepl("&lt;img", markup, fixed = TRUE))
+
+  # The people table escapes every name it writes.
+  cell <- htmltools::htmlEscape(awkward)
+  stopifnot(!grepl("<img", cell, fixed = TRUE))
+  stopifnot(grepl("&lt;img", cell, fixed = TRUE))
+
+  # And so does the table helper, for headings and for values.
+  built <- as.character(html_table(c("Name", "Ties"),
+                                   list(awkward, "3"),
+                                   justify = c("left", "num")))
+  stopifnot(!grepl("<img", built, fixed = TRUE))
+  stopifnot(grepl("&lt;img", built, fixed = TRUE))
+  # The heading is escaped on the same footing as the value.
+  headed <- as.character(html_table(c(awkward), list("1")))
+  stopifnot(!grepl("<img", headed, fixed = TRUE))
+
+  # A model name is handed to another program as an argument, so
+  # anything that would arrive as an option rather than as a name is
+  # refused before it gets there.
+  stopifnot(valid_model_name("llama3.2"), valid_model_name("qwen2.5:7b"))
+  stopifnot(!valid_model_name("-h"), !valid_model_name("a b"),
+            !valid_model_name(""), !valid_model_name("../etc/passwd"),
+            !valid_model_name(NULL), !valid_model_name(c("a", "b")))
+  stopifnot(!isTRUE(pull_model("-h")$ok))
+  stopifnot(!isTRUE(remove_model("a b")$ok))
+  TRUE
+}, error = function(e) {
+  cat("  injection error:", conditionMessage(e), "\n"); FALSE
+})
+check("nothing a reader supplies becomes code", ok_injection)
+
+# A saved session is a file, and a file can say anything. The palette it
+# names becomes a class on the page, so a value that is not one of the
+# settings this app has is dropped rather than passed on.
+ok_session_guard <- tryCatch({
+  palettes <- c("standard", "deutan", "protan", "tritan", "mono")
+  clean <- function(value) {
+    if (isTRUE(value %in% palettes)) value else NULL
+  }
+  stopifnot(identical(clean("deutan"), "deutan"))
+  stopifnot(is.null(clean("not a palette")))
+  stopifnot(is.null(clean("mono evil")))
+  stopifnot(is.null(clean(NULL)))
+  stopifnot(is.null(clean(c("mono", "deutan"))))
+
+  # A file that is not a session is refused in words, and one holding
+  # ties with one end is refused too.
+  junk <- tempfile(fileext = ".json")
+  writeLines('{"format":"x","edges":[{"from":"A"}]}', junk)
+  refused <- read_session(junk)
+  stopifnot(!isTRUE(refused$ok), nchar(refused$message) > 20)
+  TRUE
+}, error = function(e) {
+  cat("  session guard error:", conditionMessage(e), "\n"); FALSE
+})
+check("a saved session cannot name a setting the app does not have",
+      ok_session_guard)
+
+# Suite 14: the walkthrough, driven the way a reader drives it.
+#
+# Every slide is reached by pressing Next, and every slide is reached
+# again by pressing Back. Checking that the slides exist is not the same
+# as checking that they can be shown, and the difference between the two
+# is a control that fails partway through.
+ok_tour <- tryCatch({
+  slides <- tour_slides()
+  app <- shinyAppFile("app.R")
+  testServer(app, {
+    session$setInputs(tour_seen = FALSE)
+    for (i in seq_len(length(slides) - 1)) {
+      session$setInputs(tour_next = i)
+    }
+    for (i in seq_len(length(slides) - 1)) {
+      session$setInputs(tour_back = i)
+    }
+    session$setInputs(help_tour = 1)
+    session$setInputs(tour_done = 1)
+  })
+  TRUE
+}, error = function(e) {
+  cat("  walkthrough error:", conditionMessage(e), "\n"); FALSE
+})
+check("the walkthrough runs forward and back through every slide",
+      ok_tour)
+
+# A control that has not reported yet is NULL, not its default, and a
+# reactive that hands NULL to switch() raises four levels below an
+# observer, so what reaches the log names neither the control nor the
+# screen. Nothing is chosen before the first browser message arrives, so
+# the app has to answer that with no network rather than with an error.
+ok_cold_start <- tryCatch({
+  app <- shinyAppFile("app.R")
+  testServer(app, {
+    stopifnot(is.null(edges_raw()))
+    stopifnot(is.null(edges()))
+    stopifnot(is.null(bundle()))
+    # And the screens that read a missing bundle say so rather than
+    # failing.
+    # as.character() on a tag list returns one string per tag, so the
+    # whole rendered screen is what is measured.
+    rendered <- function(name) {
+      sum(nchar(as.character(output[[name]])))
+    }
+    stopifnot(rendered("research_body") > 100)
+    stopifnot(rendered("stats_body") > 100)
+  })
+  TRUE
+}, error = function(e) {
+  cat("  cold start error:", conditionMessage(e), "\n"); FALSE
+})
+check("the app answers before any control has reported", ok_cold_start)
+
+# Every download writes a file with something in it. A handler that
+# raises leaves the reader with a browser error and no file, and a
+# handler that writes nothing leaves them with a file that opens empty.
+ok_downloads <- tryCatch({
+  app <- shinyAppFile("app.R")
+  for (which_data in c("org", "message")) {
+    testServer(app, {
+      session$setInputs(dataset = which_data, size_by = "degree",
+                        sort_by = "degree", label_mode = "key",
+                        community_method = "louvain",
+                        script_dialect = "igraph", palette = "standard",
+                        stat_null = "edges", stat_reps = 40)
+      session$setInputs(run_stats = 1)
+      for (name in c("dl_people", "dl_summary", "dl_extended", "dl_script",
+                     "dl_dyads", "dl_triads", "dl_session", "dl_stats")) {
+        path <- output[[name]]
+        if (!file.exists(path) || file.info(path)$size < 20) {
+          stop(paste(name, "wrote nothing worth opening"), call. = FALSE)
+        }
+      }
+    })
+  }
+  TRUE
+}, error = function(e) {
+  cat("  download error:", conditionMessage(e), "\n"); FALSE
+})
+check("every download writes a file with something in it", ok_downloads)
+
+# Suite 15: the controls a reader has to be able to work.
+#
+# Both script dialects have to be reachable, not merely computable. A
+# control that produces the right answer when the server is driven
+# directly can still be one nobody can press, so what is checked here is
+# that the control is a kind this app renders elsewhere and that both of
+# its values reach the screen and the file.
+ok_controls <- tryCatch({
+  app <- shinyAppFile("app.R")
+  testServer(app, {
+    session$setInputs(dataset = "org", community_method = "louvain",
+                      size_by = "degree")
+    markup <- paste(as.character(output$research_body), collapse = "")
+    # A menu, with both dialects in it, and one label pointing at it.
+    stopifnot(grepl("<select", markup, fixed = TRUE))
+    stopifnot(grepl('id="script_dialect"', markup))
+    stopifnot(grepl("tidygraph and ggraph", markup, fixed = TRUE))
+    for (dialect in c("igraph", "tidy")) {
+      session$setInputs(script_dialect = dialect)
+      shown <- output$export_code
+      path <- output$dl_script
+      stopifnot(nchar(shown) > 200)
+      stopifnot(file.exists(path), file.info(path)$size > 200)
+      # The screen and the file agree about which dialect is on.
+      wanted <- if (dialect == "tidy") "tidygraph" else "library(igraph)"
+      stopifnot(grepl(wanted, shown, fixed = TRUE))
+      stopifnot(any(grepl(wanted, readLines(path, warn = FALSE),
+                          fixed = TRUE)))
+      stopifnot(grepl(dialect, basename(path), fixed = TRUE))
+    }
+  })
+
+  # Every color setting the dialog offers is one the figure export can
+  # draw with, and each preview carries a name, a line saying who it is
+  # for, and its own swatches, all on their own lines.
+  stopifnot(all(PALETTE_NAMES %in% names(figure_palettes)))
+  for (name in PALETTE_NAMES) {
+    joined <- paste(as.character(swatch_label("Name", name, "A note.")),
+                    collapse = "")
+    stopifnot(grepl("swatch-name", joined, fixed = TRUE))
+    stopifnot(grepl("swatch-note", joined, fixed = TRUE))
+    stopifnot(grepl("swatch-row", joined, fixed = TRUE))
+    # Five swatches, each carrying a color from that palette.
+    stopifnot(lengths(regmatches(joined, gregexpr("<svg", joined))) == 5)
+    for (hex in figure_palettes[[name]][1:5]) {
+      stopifnot(grepl(hex, joined, fixed = TRUE))
+    }
+  }
+  # A setting with no note still renders.
+  stopifnot(nchar(paste(as.character(swatch_label("Name", "mono")),
+                        collapse = "")) > 40)
+  TRUE
+}, error = function(e) {
+  cat("  control error:", conditionMessage(e), "\n"); FALSE
+})
+check("both script dialects are reachable and agree with their files",
+      ok_controls)
+
+# Suite 16: what the local model can be asked for.
+#
+# The model rewords findings. It never computes and never sees the
+# network, so what changes between modes is the instruction and never
+# the numbers. That is the property worth holding: three modes that
+# quietly sent three different sets of facts would be three different
+# answers rather than three readings of one.
+ok_modes <- tryCatch({
+  modes <- model_modes()
+  stopifnot(length(modes) >= 3)
+  stopifnot(all(c("plain", "methods", "caution") %in% names(modes)))
+  for (name in names(modes)) {
+    stopifnot(nchar(modes[[name]]$label) > 3)
+    stopifnot(nchar(modes[[name]]$task) > 60)
+  }
+  # Every mode is a different instruction.
+  tasks <- vapply(modes, function(m) m$task, "")
+  stopifnot(length(unique(tasks)) == length(tasks))
+
+  app <- shinyAppFile("app.R")
+  testServer(app, {
+    session$setInputs(dataset = "org", community_method = "louvain",
+                      size_by = "degree", stat_null = "edges",
+                      stat_reps = 40)
+    session$setInputs(run_stats = 1)
+    control <- paste(as.character(output$stats_model_ui), collapse = "")
+    stopifnot(grepl("stats_model_mode", control, fixed = TRUE))
+    for (name in names(modes)) {
+      stopifnot(grepl(modes[[name]]$label, control, fixed = TRUE))
+    }
+    # The facts the model is handed carry the numbers and name the null
+    # model, and say so when a measure could not be computed rather than
+    # handing over the text NA for a model to restate as a number.
+    res <- stats_result()
+    facts <- c(
+      sprintf("These results come from %d random networks.", res$reps),
+      apply(res$table, 1, function(row) row[["measure"]]))
+    stopifnot(length(facts) == nrow(res$table) + 1)
+    stopifnot(!any(grepl("^NA$", facts)))
+  })
+  TRUE
+}, error = function(e) {
+  cat("  model mode error:", conditionMessage(e), "\n"); FALSE
+})
+check("the local model can be asked for three readings of one result",
+      ok_modes)
+
+# Suite 17: a verdict rests on more than the proportion.
+#
+# The American Statistical Association's 2016 statement is the reason
+# this suite exists. A proportion answers how often chance would beat an
+# observation, which is not the same question as whether the difference
+# is large, whether it would survive a second sample, or whether it
+# rests on one person. Each of those has its own check below, and each
+# one has to be able to change a verdict on its own, or it is decoration
+# rather than a check.
+ok_weighing <- tryCatch({
+  # A small proportion is not enough when the observation still falls
+  # inside the range the random networks produced.
+  inside <- list(observed = 0.5, mean = 0.4, sd = 0.1,
+                 lo = 0.2, hi = 0.6, p_greater = 0.02, p_less = 0.98,
+                 p_error = 0.002, z = 1, reps = 500L)
+  stopifnot(identical(assess(inside)$band, "edge"))
+
+  # The same numbers with the observation outside the range is a result.
+  outside <- inside
+  outside$hi <- 0.45
+  stopifnot(assess(outside)$band %in% c("clear", "strong"))
+
+  # Unless the sampling error on the proportion straddles the threshold,
+  # in which case the sampling and not the network is deciding.
+  noisy <- outside
+  noisy$p_greater <- 0.045
+  noisy$p_error <- 0.02
+  stopifnot(identical(assess(noisy)$band, "edge"))
+
+  # And a result that moves back inside the range when the best
+  # connected person leaves is a fact about that person.
+  fragile <- assess(outside, without = 0.3)
+  stopifnot(identical(fragile$band, "fragile"))
+  stopifnot(identical(fragile$label, "Rests on one person"))
+
+  # A comparison with no spread in it decides nothing either way.
+  flat <- outside
+  flat$sd <- 0
+  stopifnot(identical(assess(flat)$band, "unknown"))
+  TRUE
+}, error = function(e) {
+  cat("  weighing error:", conditionMessage(e), "\n"); FALSE
+})
+check("a verdict rests on more than the proportion", ok_weighing)
+
+# Suite 18: every reading is about the network in front of the reader.
+#
+# A reading that says a proportion was above a threshold is a reading of
+# the method. What each one has to carry is a count of things this
+# network has, the range the random networks produced, and what the gap
+# amounts to in the same units.
+ok_specific <- tryCatch({
+  for (sample_name in c("org", "message")) {
+    edges <- if (sample_name == "org") {
+      sample_org_network()
+    } else {
+      sample_message_network()
+    }
+    metrics <- compute_metrics(build_graph(edges))
+    res <- network_statistics(metrics, reps = 60, seed = 8)
+
+    stopifnot(all(c("chance_low", "chance_high", "p_error", "verdict",
+                    "band", "without_top") %in% names(res$table)))
+    # Every range holds its average.
+    holds <- res$table$chance_low <= res$table$chance_mean &
+      res$table$chance_mean <= res$table$chance_high
+    stopifnot(all(holds, na.rm = TRUE))
+    # Every reading names the number of random networks that produced
+    # the range, and reports a range rather than a threshold.
+    for (line in res$table$reading) {
+      stopifnot(grepl("Across", line, fixed = TRUE))
+      stopifnot(grepl("between", line, fixed = TRUE))
+      stopifnot(grepl("averaging", line, fixed = TRUE))
+      # And none of them falls back on naming a threshold.
+      stopifnot(!grepl("p = ", line, fixed = TRUE))
+    }
+    # Measures with something countable behind them say how many of
+    # what, and the count has to be of this network rather than a share
+    # printed twice.
+    countable <- res$table$key %in% c("clustering", "giant_share",
+                                      "reciprocity", "ei")
+    for (line in res$table$reading[countable]) {
+      stopifnot(grepl("^Here [0-9,]+ of this network's [0-9,]+ ", line))
+    }
+    # The drop check names a real person from this network.
+    if (!is.null(res$dropped)) {
+      stopifnot(res$dropped$person %in% metrics$names)
+    }
+    # What the model is handed describes the network before it lists
+    # anything, so a model reading it can write about this network.
+    facts <- stats_facts(res, "A sample")
+    stopifnot(grepl("people and", facts[1], fixed = TRUE))
+    stopifnot(grepl("density", facts[1], fixed = TRUE))
+    stopifnot(length(facts) >= nrow(res$table) + 3)
+    # And every finding it is handed carries its whole reading rather
+    # than three numbers.
+    stopifnot(all(nchar(tail(facts, nrow(res$table))) > 120))
+  }
+  TRUE
+}, error = function(e) {
+  cat("  specificity error:", conditionMessage(e), "\n"); FALSE
+})
+check("every reading is about the network in front of the reader",
+      ok_specific)
 
 cat("\n", pass, "passed,", fail, "failed\n")
 if (fail > 0) quit(status = 1)

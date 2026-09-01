@@ -8,8 +8,15 @@
 (function () {
   "use strict";
 
+  /* The five color settings. Standard needs no class, since the base
+     stylesheet is the standard palette; the other four each add one.
+     The list is written out rather than derived, so a setting cannot be
+     added to the app without also being removed here on the way out,
+     which is how two palettes end up applied at once. */
+  var PALETTE_CLASSES = ["cb-deutan", "cb-protan", "cb-tritan", "cb-mono"];
+
   function applyPalette(name) {
-    ["cb-deutan", "cb-tritan", "cb-mono"].forEach(function (cls) {
+    PALETTE_CLASSES.forEach(function (cls) {
       document.body.classList.remove(cls);
     });
     if (name && name !== "standard") {
@@ -57,7 +64,62 @@
   }
 
   if (window.Shiny) {
-    Shiny.addCustomMessageHandler("set-palette", applyPalette);
+    /* Scrolls one element into view inside whatever is scrolling around
+     it. Used after a model answers.
+
+     The first version looked once on the next animation frame and gave
+     up. That was too early: the message and the rendered answer arrive
+     in the same flush, and the browser has not necessarily put the new
+     markup in the document by the time the handler runs, so it found
+     nothing and did nothing. This one looks for up to two seconds.
+
+     It also scrolls the ancestor itself rather than relying on
+     scrollIntoView, which walks up to the window and can move the page
+     behind the panel instead of the panel. */
+  function scrollWithin(target) {
+    var parent = target.parentElement;
+    while (parent && parent !== document.body) {
+      var style = window.getComputedStyle(parent);
+      var scrolls = /(auto|scroll)/.test(style.overflowY);
+      if (scrolls && parent.scrollHeight > parent.clientHeight + 4) {
+        var offset = target.offsetTop - parent.offsetTop;
+        var still = window.matchMedia &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var top = Math.max(0, offset - 12);
+        if (still || !parent.scrollTo) {
+          parent.scrollTop = top;
+        } else {
+          parent.scrollTo({ top: top, behavior: "smooth" });
+        }
+        return true;
+      }
+      parent = parent.parentElement;
+    }
+    return false;
+  }
+
+  Shiny.addCustomMessageHandler("scroll-to", function (id) {
+    var tries = 0;
+    function look() {
+      tries += 1;
+      var target = document.getElementById(id);
+      if (target) {
+        if (!scrollWithin(target)) {
+          var still = window.matchMedia &&
+            window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          target.scrollIntoView({
+            behavior: still ? "auto" : "smooth",
+            block: "nearest"
+          });
+        }
+        return;
+      }
+      if (tries < 40) window.setTimeout(look, 50);
+    }
+    look();
+  });
+
+  Shiny.addCustomMessageHandler("set-palette", applyPalette);
     Shiny.addCustomMessageHandler("tour-seen", function (unused) {
       try { window.localStorage.setItem(TOUR_KEY, "yes"); } catch (e) {}
     });

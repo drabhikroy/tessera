@@ -13,8 +13,13 @@ suppressPackageStartupMessages({
 
 # Small helpers keep the sentence templates readable further down.
 
+# Percentages are written as words rather than with a symbol, because
+# the prose reads them aloud in sentences and a symbol interrupts that.
 pct <- function(x) paste0(round(100 * x), " percent")
 
+# Joins names the way a sentence would, with the serial comma. Three or
+# more names is the common case in a network of any size, so the list
+# form matters more here than it looks like it should.
 name_list <- function(x) {
   if (length(x) == 0) return("")
   if (length(x) == 1) return(x)
@@ -22,6 +27,9 @@ name_list <- function(x) {
   paste0(paste(x[-length(x)], collapse = ", "), ", and ", x[length(x)])
 }
 
+# The k highest scoring names for a measure, used wherever the prose
+# says who stands out. Ties are broken arbitrarily rather than reported,
+# since a sentence naming six people for third place helps nobody.
 top_names <- function(values, names, k = 3) {
   tibble(name = names, value = values) |>
     # Ties at zero say nothing worth naming, so they are dropped.
@@ -38,6 +46,9 @@ density_phrase <- function(d) {
   else "loosely connected"
 }
 
+# The usual reading of modularity: below 0.3 the group boundaries are
+# weak enough that a different algorithm would likely draw them
+# elsewhere, and the wording says so rather than announcing groups.
 modularity_phrase <- function(q) {
   if (q >= 0.5) "clearly separated"
   else if (q >= 0.3) "visibly distinct"
@@ -71,7 +82,10 @@ describe_network <- function(metrics) {
     metrics$n_groups, modularity_phrase(metrics$modularity), metrics$modularity
   ))
 
-  # Paragraph 3: the people who hold it together.
+  # Paragraph 3: the people who hold it together. Betweenness and degree
+  # are reported together on purpose. They disagree often, and a reader
+  # who sees only one of them draws a confident wrong conclusion about
+  # who matters in the network.
   bridges <- top_names(metrics$betweenness, metrics$names, 3)
   hubs    <- top_names(metrics$degree, metrics$names, 3)
   if (length(bridges) > 0) {
@@ -99,6 +113,10 @@ describe_network <- function(metrics) {
 
 # The spotlight text for one selected person. Written to be read next to the
 # dimmed map, so it names what the reader is looking at.
+#
+# Every sentence about a person is comparative rather than absolute: a
+# rank among the people present, not a score. A raw betweenness figure
+# means nothing to a reader who has never seen another one.
 describe_person <- function(metrics, node_index, groups) {
   nm  <- metrics$names[node_index]
   deg <- metrics$degree[node_index]
@@ -143,6 +161,81 @@ describe_person <- function(metrics, node_index, groups) {
 
 # A one line caveat that travels with every export so the numbers are never
 # read as more than they are.
+# What the model is given. Not the panel prose.
+#
+# The cards explain the app as well as the network: what a group is, how
+# groups are found, what the reading does and does not claim. Those
+# sentences are right on screen beside the map and useless coming back
+# from a model, which restates a definition as though it were a finding
+# and spends a paragraph doing it. Sending the whole panel is what
+# produced answers explaining that groups come from patterns of
+# connection.
+#
+# So the model gets findings only, as short statements of fact with the
+# numbers and the names in them, and is asked to write from those. The
+# definitions stay where they belong, above the answer, in prose nobody
+# had to generate.
+model_facts <- function(metrics, groups) {
+  m <- metrics
+  top <- top_names(m$betweenness, m$names, 3)
+  busiest <- top_names(m$degree, m$names, 3)
+  facts <- c(
+    sprintf("People: %d. Ties: %d.", m$n, m$m),
+    sprintf("Density: %s of all possible ties are present.",
+            pct(m$density)),
+    if (m$n_components == 1) {
+      sprintf("The network is in one piece. A typical path runs through %.1f people.",
+              m$mean_dist)
+    } else {
+      sprintf("The network is in %d separate pieces. The largest holds %s of everyone.",
+              m$n_components, pct(m$giant_share))
+    },
+    sprintf("Groups found: %d. The largest holds %d people.",
+            m$n_groups, max(table(m$membership))),
+    sprintf("Group separation (modularity): %.2f.", m$modularity),
+    sprintf("Sitting on the most paths between other people: %s.",
+            name_list(top)),
+    sprintf("Most direct connections: %s.", name_list(busiest)),
+    if (length(m$cut_ids) > 0) {
+      sprintf("Removing any one of these would split the network: %s.",
+              name_list(head(m$cut_ids, 5)))
+    } else {
+      "No single person holds the network together on their own."
+    }
+  )
+  facts[!vapply(facts, is.null, logical(1))]
+}
+
+# The same, for one person. Comparative rather than absolute, since a
+# raw score means nothing to a reader who has seen no other.
+model_facts_person <- function(metrics, idx, groups) {
+  m <- metrics
+  rank_of <- function(values) {
+    sum(values > values[idx]) + 1
+  }
+  who <- m$names[idx]
+  c(
+    sprintf("This is about %s.", who),
+    sprintf("%s has %d direct connections, which ranks %d of %d people.",
+            who, m$degree[idx], rank_of(m$degree), m$n),
+    sprintf("On sitting between others, %s ranks %d of %d.",
+            who, rank_of(m$betweenness), m$n),
+    sprintf("On reaching the rest of the network quickly, %s ranks %d of %d.",
+            who, rank_of(m$closeness), m$n),
+    sprintf("%s is in group %s, which holds %d people.",
+            who, as.character(m$membership[idx]),
+            sum(m$membership == m$membership[idx])),
+    if (who %in% m$cut_ids) {
+      sprintf("Removing %s would split the network into pieces.", who)
+    } else {
+      sprintf("Removing %s would not split the network.", who)
+    }
+  )
+}
+
+# This line is attached to every export rather than shown once in the
+# interface, because the file outlives the screen it came from and will
+# be read by people who never saw the app.
 caveat_line <- function() {
   paste("These readings come from one snapshot of recorded ties.",
         "They describe position in the network, not skill, effort, or worth.")

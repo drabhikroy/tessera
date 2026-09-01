@@ -10,6 +10,7 @@ on:
   push:
     tags: ["v*"]
 
+# The only write this workflow needs is the release it publishes.
 permissions:
   contents: write
 
@@ -52,7 +53,8 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           mkdir -p /tmp/build
-          rsync -a --exclude ".git" --exclude "node_modules" \
+          rsync -a --exclude ".git" --exclude ".github" \
+                --exclude "node_modules" \
                 --exclude "package-lock.json" --exclude "package.json" \
                 ./ "/tmp/build/tessera-$VERSION/"
           (cd /tmp/build && zip -rq "tessera-$VERSION.zip" "tessera-$VERSION")

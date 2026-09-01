@@ -13,21 +13,26 @@ suppressPackageStartupMessages({
   library(dplyr)
 })
 
-# Palettes match www/styles.css. The figure follows whichever color
-# setting is active in the app when the download happens.
+# Palettes match the light mode blocks in www/styles.css, since the
+# exported figure sits on a white ground whatever mode the app is
+# in. A test compares these values against the stylesheet on every run,
+# so the two cannot drift apart without the run failing.
 figure_palettes <- list(
-  standard = c("#e69f00", "#56b4e9", "#009e73", "#f0e442",
-               "#0072b2", "#d55e00", "#cc79a7", "#6f6f6f",
-               "#9aa5af", "#2b8f7a", "#7b4fa8", "#7a5232"),
-  deutan   = c("#e69f00", "#56b4e9", "#f0e442", "#0b4f8f",
-               "#b48ade", "#9c6a00", "#274b66", "#6f6f6f",
-               "#9aa5af", "#2f4b7c", "#d9c37a", "#5c4b8a"),
-  tritan   = c("#e4643b", "#0e6f5c", "#f2a0ac", "#9e1b32",
-               "#146b5c", "#7a3216", "#8f8f8f", "#4a4a4a",
-               "#9aa5af", "#b03050", "#3fa08c", "#d98a76"),
-  mono     = c("#1a1a1a", "#454545", "#6b6b6b", "#8f8f8f",
-               "#2e2e2e", "#585858", "#7d7d7d", "#a1a1a1",
-               "#b8b8b8", "#0d0d0d", "#383838", "#949494")
+  standard = c("#ca8700", "#3b9ed1", "#009e73", "#9d9900",
+               "#0072b2", "#d55e00", "#cc79a7", "#8e8b88",
+               "#7a8794", "#2b8f7a", "#7b4fa8", "#7a5232"),
+  deutan   = c("#ca8700", "#259fd5", "#9d9909", "#0f5598",
+               "#9c85ed", "#9c6a00", "#224560", "#78746b",
+               "#585349", "#315084", "#a7944e", "#756ebf"),
+  protan   = c("#ae6a00", "#277caf", "#959231", "#00366e",
+               "#8c69bf", "#7a5510", "#153a42", "#808892",
+               "#5f646d", "#16375c", "#827134", "#554785"),
+  tritan   = c("#e4643b", "#69a08a", "#e07483", "#9d1831",
+               "#146b5c", "#b98a7e", "#888e8e", "#a59091",
+               "#5c5c5c", "#b13452", "#3c9f8b", "#ce816d"),
+  mono     = c("#141414", "#353535", "#4e4e4e", "#676767",
+               "#1e1e1e", "#414141", "#5a5a5a", "#838383",
+               "#919191", "#030303", "#2a2a2a", "#757575")
 )
 
 # ggplot2 offers five fillable point shapes: circle, square, diamond,

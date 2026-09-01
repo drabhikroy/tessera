@@ -1,0 +1,14 @@
+# Keeps the workflow actions current. The actions are the only
+# dependency in this repository that a person does not choose when they
+# run the app: R packages are resolved at run time from whatever the
+# reader has, and the browser suites take one package that CI installs
+# fresh on every run.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: ci

@@ -12,6 +12,10 @@ stage <- function(inner) {
   sprintf('<svg class="vignette" viewBox="0 0 320 170" role="img" aria-hidden="true">%s</svg>', inner)
 }
 
+# The four primitives every vignette is built from. They take a class
+# rather than a color so the pictures inherit the theme tokens, which is
+# what keeps them correct in all ten mode and palette states without a
+# second set of colors to maintain.
 dot <- function(x, y, r, cls) {
   sprintf('<circle cx="%s" cy="%s" r="%s" class="v-%s"/>', x, y, r, cls)
 }
@@ -35,7 +39,15 @@ tie <- function(x1, y1, x2, y2, w = 2, cls = "tie", delay = 0) {
           d, cls, w, len, len, len, delay)
 }
 
-# A node that fades and grows into place after its ties arrive.
+# A node that fades and grows into place after its ties arrive. The
+# order matters: ties first, then the people at their ends, because that
+# is the order the app builds a map in and the tour is showing what the
+# app does rather than an abstract animation.
+#
+# The animation is declarative SVG rather than script, so it starts the
+# moment the dialog paints and needs nothing from the client bundle. It
+# also stops when a reader has asked for reduced motion, since the
+# stylesheet suppresses the whole vignette stage in that case.
 adot <- function(x, y, r, cls, delay = 0) {
   sprintf(paste0('<circle cx="%s" cy="%s" r="%s" class="v-%s" ',
                  'opacity="0"><animate attributeName="opacity" ',
@@ -61,8 +73,9 @@ tour_slides <- function() {
     list(
       title = "Welcome to Tessera",
       text  = paste("Tessera turns a list of who works with whom into a",
-                    "map, then explains the map in plain English. This",
-                    "short tour shows the four things worth knowing."),
+                    "map, then explains the map in plain sentences. The",
+                    "Overview tab has the longer version of this, with a",
+                    "worked example, whenever you want it."),
       art   = stage(paste0(
         tie(70, 90, 140, 55, 2, "tie", 0.0),
         tie(140, 55, 215, 85, 2, "tie", 0.15),
@@ -75,12 +88,15 @@ tour_slides <- function() {
         adot(250, 120, 9, "n3", 1.0), adot(262, 52, 9, "n3", 1.0)
       ))
     ),
+    # Slide two answers the question that stops most people: what
+    # exactly do I have to have before this is worth trying.
     list(
       title = "Bring a simple list of ties",
       text  = paste("A spreadsheet with two or three columns is enough:",
                     "who the tie is from, who it is to, and, if you have",
                     "it, how strong. Save it as a CSV and drop it in, or",
-                    "start with a built in sample."),
+                    "start with a built in sample. Nothing else needs",
+                    "preparing."),
       art   = stage(paste0(
         '<rect x="34" y="30" width="110" height="110" rx="8" class="v-card"/>',
         '<text x="52" y="56" class="v-code">from, to</text>',
@@ -98,11 +114,16 @@ tour_slides <- function() {
         adot(240, 120, 11, "n3", 1.1)
       ))
     ),
+    # Slide three is where the shape channel is introduced. It is said
+    # out loud here because a reader who thinks color carries the groups
+    # will read the monochrome setting as broken rather than as an
+    # option.
     list(
       title = "Shapes and colors mark the groups",
       text  = paste("Groups come from the tie pattern alone. Each group",
-                    "gets a color and a shape, so the map stays readable",
-                    "for every kind of color vision, including none."),
+                    "gets a shape and a color, and the shape comes",
+                    "first, so the map reads the same in all five color",
+                    "settings under Settings, monochrome included."),
       art   = stage(paste0(
         tie(70, 60, 115, 95, 2, "tie", 0.0),
         tie(115, 95, 68, 122, 2, "tie", 0.15),
@@ -143,8 +164,9 @@ tour_slides <- function() {
       title = "Click a person for the spotlight",
       text  = paste("Clicking a person, or pressing Tab and Enter, dims",
                     "everything past their reach and rewrites the",
-                    "reading panel for them. Click open space to step",
-                    "back out."),
+                    "reading panel for them. Each card leads with the",
+                    "finding and keeps the rest one press away. Click",
+                    "open space to step back out."),
       art   = stage(paste0(
         tie(90, 60, 160, 85, 2, "tie-dim", 0.0),
         tie(230, 60, 160, 85, 2, "tie", 0.1),
@@ -161,6 +183,9 @@ tour_slides <- function() {
         'dur="2.2s" repeatCount="indefinite"/></circle>'
       ))
     ),
+    # Slide six carries the one reading in the app that people act on
+    # most often, so it gets its own slide rather than a line inside
+    # another one.
     list(
       title = "Watch for the weak joints",
       text  = paste("A dashed ring marks a single point of failure:",
@@ -187,12 +212,28 @@ tour_slides <- function() {
         'dur="2s" repeatCount="indefinite"/></circle>'
       ))
     ),
+    # Slide seven covers the optional model, which readers otherwise
+    # meet for the first time as a control that fails. Saying up front
+    # what it does and does not do is cheaper than explaining it after
+    # someone has pressed it.
     list(
-      title = "Yours alone",
+      title = "A local model, if you want one",
+      text  = paste("One control under the reading panel rewords the",
+                    "explanation in a model's own voice. It never",
+                    "produces a number and never sees the network, and",
+                    "the app needs no model at all. Local models in the",
+                    "header sets one up in three steps, here, without",
+                    "leaving the app or sending anything anywhere."),
+      art   = vignette_model()
+    ),
+    list(
+      title = "Yours alone, and it keeps",
       text  = paste("Everything runs on this machine. No account, no",
-                    "server, nothing sent anywhere. If you connect a",
-                    "local language model later, that runs here too.",
-                    "The Local models guide in the header explains how."),
+                    "server, nothing sent anywhere. Save writes your",
+                    "ties and your view to a file you keep, and Resume",
+                    "reads it back. A local language model is optional;",
+                    "Local models in the header sets one up here, in",
+                    "steps, without leaving the app."),
       art   = stage(paste0(
         '<path d="M92,72 L160,34 L228,72 V138 H92 Z" class="v-house" ',
         'stroke-dasharray="360" stroke-dashoffset="360"><animate ',
@@ -212,9 +253,42 @@ tour_slides <- function() {
 # The local model guide. Written for someone who has never heard of a
 # local model. Structure: what it is, what stays private, how to set it
 # up, and an honest comparison of four models worth considering.
+# Each entry carries an id, which is the name the runtime knows it by
+# and the name a pull uses, and a memory figure, which is the working
+# set the model needs before the rest of the machine is accounted for.
+# The setup screen compares that figure against what the machine
+# reported to say which models fit.
+#
+# The four are ordered by download size rather than by preference, and
+# each one carries the thing it is bad at. A guide that lists only what
+# a model does well leaves the reader to discover the rest after a four
+# gigabyte download.
+# The vignette for the model slide: the reading panel on the left, a
+# small box on the right standing for the model, and one arrow between
+# them pointing the way the text travels. The arrow goes one way on
+# purpose, because that is the claim the slide is making.
+vignette_model <- function() {
+  rect <- function(x, y, w, h, r, cls) {
+    sprintf(paste0('<rect x="%s" y="%s" width="%s" height="%s" rx="%s" ',
+                   'class="%s"/>'), x, y, w, h, r, cls)
+  }
+  stage(paste0(
+    rect(26, 34, 74, 92, 8, "vig-panel"),
+    rect(38, 48, 50, 5, 2, "vig-line"),
+    rect(38, 60, 42, 5, 2, "vig-line"),
+    rect(38, 72, 50, 5, 2, "vig-line"),
+    rect(38, 84, 34, 5, 2, "vig-line"),
+    '<path d="M108 80 H150" class="vig-arrow"/>',
+    '<path d="M144 74 L150 80 L144 86" class="vig-arrow"/>',
+    rect(158, 52, 62, 56, 10, "vig-box"),
+    '<text x="189" y="84" class="vig-caption">model</text>'
+  ))
+}
+
 model_options <- function() {
   list(
     list(
+      id = "llama3.2", min_ram = 8,
       name = "Llama 3.2 (3B)", pull = "ollama pull llama3.2",
       download = "About a 2 GB download",
       memory = "Comfortable on 8 GB of memory",
@@ -223,6 +297,7 @@ model_options <- function() {
       tradeoff = "Prose is plain. On long summaries it can flatten wording rather than improve it."
     ),
     list(
+      id = "gemma3", min_ram = 8,
       name = "Gemma 3 (4B)", pull = "ollama pull gemma3",
       download = "About a 3 GB download",
       memory = "Comfortable on 8 GB of memory",
@@ -231,6 +306,7 @@ model_options <- function() {
       tradeoff = "Slightly larger download than Llama 3.2 for a similar job."
     ),
     list(
+      id = "qwen2.5", min_ram = 16,
       name = "Qwen 2.5 (7B)", pull = "ollama pull qwen2.5",
       download = "About a 4.5 GB download",
       memory = "Happiest with 16 GB of memory",
@@ -239,11 +315,12 @@ model_options <- function() {
       tradeoff = "Wording can read stiff. Slower on machines with 8 GB."
     ),
     list(
+      id = "llama3.1", min_ram = 16,
       name = "Llama 3.1 (8B)", pull = "ollama pull llama3.1",
       download = "About a 4.7 GB download",
       memory = "Happiest with 16 GB of memory",
       speed = "Moderate",
-      good = "The best prose of the four. Summaries come back reading like a person wrote them.",
+      good = "The best writing of the four. Summaries come back reading like a person wrote them.",
       tradeoff = "The largest download here, and the slowest on modest machines."
     )
   )

@@ -14,8 +14,11 @@ statistics for researchers.
   the dyad and triad census, and a runnable igraph script export.
 - A glyph system of twelve shapes crossed with three fill variants
   across twelve colors, thirty six combinations distinguishable by shape
-  alone before color, checked against WCAG 2.2 at 4.5 to 1 across four
-  palettes including a monochrome, no color mode.
+  alone before color, across five color settings including separate
+  deuteranopia and protanopia palettes and a monochrome, no color mode.
+  Every color in all ten theme and palette states is measured against
+  WCAG 2.2 AA by a test that fails the build rather than by a claim in a
+  comment.
 - A hand built SVG map: draggable people whose ties follow, keyboard
   reachable with spoken descriptions, and a full screen view using the
   browser's own full screen mode with the reading panel floating over
@@ -24,6 +27,9 @@ statistics for researchers.
   through Ollama, that rewords the computed reading panel in its own
   voice. It never invents a number, and nothing else in the app depends
   on one.
+- An Overview screen that says what the app does, shows a worked example
+  with the sentences it would write about it, and gives the shape of the
+  input file, all before anything is loaded.
 - A seven slide walkthrough on first launch, always available again from
   the navigation bar.
 
