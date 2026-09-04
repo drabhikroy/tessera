@@ -23,71 +23,27 @@ fragile.](docs/screenshot-operator.png)
 
 Tessera supports two audiences from one screen:
 
-- The Overview tab explains what the app does, shows a worked example,
-  and gives the shape of the file it expects. It reads the same before
-  any data is loaded as after.
-- The Explore tab provides an interactive map, readable explanations,
-  a route finder between any two people, and a people table.
-- The Research tab provides detailed statistics for users who want to
-  inspect the analysis.
-- The Statistics tab asks whether what the other tabs describe is more
-  than the size and density of the network would produce on their own,
-  using conditional uniform graph tests and a permutation test for
-  group crossing.
+- **Overview** — explains what the app does, shows a worked example, and
+  gives the shape of the file it expects, before or after data is loaded
+- **Explore** — a no-code view: interactive network map, plain-language
+  reading panel, people table, and group and relationship exploration
+- **Research** — detailed statistics for readers who want to inspect the
+  analysis: extended centralities (degree, strength, betweenness, harmonic
+  closeness, eigenvector, PageRank, HITS), community detection (Louvain,
+  Leiden, Walktrap, fast greedy, Girvan-Newman), global diagnostics
+  (density, transitivity, reciprocity, components, diameter, mean
+  distance, mean degree), dyad and triad census, and a runnable igraph
+  script that reproduces the analysis outside the app
+- **Statistics** — tests whether what the other tabs describe is more
+  than network size and density alone would produce, using conditional
+  uniform graph tests and a permutation test for group crossing (see
+  [How it works](#how-it-works))
 
-Both tabs use the same loaded network, so moving between them does not
-require reloading data.
+Both tabs use the same loaded network, so moving between them does not 
+require reloading data. 
 
-The Explore tab provides a no-code view of the network:
-
-- Interactive network map
-- Plain-language reading panel
-- People table
-- Group and relationship exploration
-
-The Research tab provides:
-
-- Extended centralities: degree, strength, betweenness, harmonic
-  closeness, eigenvector, PageRank, and HITS hub and authority scores
-- Community detection with Louvain, Leiden, Walktrap, fast greedy, and
-  Girvan-Newman algorithms
-- Global diagnostics including density, transitivity, reciprocity,
-  components, diameter, mean distance, and mean degree
-- Dyad and triad census with Holland and Leinhardt labels for directed
-  networks
-- A runnable igraph script that reproduces the analysis outside the
-  app
-
-The three cards at the top of the Research tab are held to one height,
-with the whole of each one behind the control in its heading. Opening a
-card gives every table in it a search box, sortable headings, paging,
-and a file that carries what is on screen rather than what was on screen
-before the search. The people table and the statistics results open the
-same way.
-
-The Statistics tab asks a different question from the Research tab.
-Everything on the Research tab describes what is in front of you; the
-Statistics tab asks whether it is more than the size and density of the
-network would produce on their own, which is the conditional uniform
-graph test. Clustering, degree centralization, path concentration, group
-separation, mean distance, degree assortativity, how much of the network
-hangs together, and, for directed networks, reciprocity and the closed
-and cyclic triad classes are each compared against several hundred
-random networks under one of two null models. The E-I index is tested by
-permuting the grouping rather than the ties, since the question is about
-the grouping. No verdict rests on the proportion alone. Each result is
-weighed four ways: the proportion, whether the network falls outside the
-range the random ones actually produced, the sampling error on the
-proportion itself, and what happens to the result when the best
-connected person is removed. Each of those can change a verdict on its
-own, and a result that moves back inside the range when one person
-leaves is reported as a fact about that person. Every reading is written
-about the network in front of you, in counts of what it has rather than
-in shares, and any measure the run declined to make is listed with the
-reason. If a local model is set up, the
-results can be asked for in plain words, as the paragraph a researcher
-would put in a methods and results section, or as the cautions a careful
-reviewer would raise.
+Every table, including people and statistics 
+results, opens with a search box, sortable headings, and paging.
 
 ## Requirements
 
@@ -269,6 +225,25 @@ for the reader to work out.
 Groups remain readable across different visual settings. Tessera uses
 combinations of shape and color so community identity does not depend on
 color alone.
+
+The Statistics tab asks whether what the Research tab describes is more
+than the size and density of the network would produce on their own,
+the conditional uniform graph test. Clustering, degree centralization,
+path concentration, group separation, mean distance, degree
+assortativity, how much of the network hangs together, and, for directed
+networks, reciprocity and the triad classes, are each compared against
+several hundred random networks under one of two null models. The E-I
+index is tested by permuting the grouping rather than the ties.
+
+No verdict rests on the proportion alone: each result is weighed by the
+proportion itself, whether the network falls outside the range the
+random networks produced, the sampling error on the proportion, and what
+happens when the best-connected person is removed. A result that moves
+back inside the range when one person leaves is reported as a fact about
+that person. Every reading is written in counts rather than shares, and
+any measure the run declined to make is listed with the reason. If a
+local model is set up, results can be requested in plain words, as a
+methods-and-results paragraph, or as a reviewer's cautions.
 
 ## Help
 
