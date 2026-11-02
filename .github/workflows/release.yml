@@ -14,11 +14,15 @@ on:
 permissions:
   contents: write
 
+# Every action is pinned to a full commit rather than a tag. A tag can be
+# moved to different code after the fact, and an action runs with this
+# repository's token, so a moved tag is a way into the repository. The
+# version comment beside each pin is what Dependabot reads and updates.
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build the release notes
         id: notes
@@ -60,7 +64,10 @@ jobs:
           (cd /tmp/build && zip -rq "tessera-$VERSION.zip" "tessera-$VERSION")
           mv "/tmp/build/tessera-$VERSION.zip" .
 
-      - uses: softprops/action-gh-release@v3
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           body_path: /tmp/notes.md
           files: tessera-*.zip
+          # A draft, so nothing is public until it has been read and
+          # published by hand from the releases page.
+          draft: true

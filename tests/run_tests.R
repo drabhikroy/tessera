@@ -1126,5 +1126,278 @@ ok_specific <- tryCatch({
 check("every reading is about the network in front of the reader",
       ok_specific)
 
+# Robustness and security. Each check below reproduces a defect found
+# in the 0.25.0 quality review, so it fails on the code that had the
+# defect and passes on the fix.
+
+# A strength the measures cannot use is treated like any other unusable
+# value. Infinity broke eigenvector centrality and ended the session.
+inf_ties <- data.frame(from = c("A", "B", "C"), to = c("B", "C", "A"),
+                       weight = c(1, Inf, 2))
+g_inf <- build_graph(inf_ties)
+w_inf <- igraph::E(as_plain_igraph(g_inf))$weight
+check("an infinite strength is read as one, like other unusable values",
+      all(is.finite(w_inf)) && sum(w_inf == 1) == 2)
+m_inf <- tryCatch(compute_metrics(g_inf), error = function(e) NULL)
+check("a network with an infinite strength can still be measured",
+      !is.null(m_inf) && all(is.finite(m_inf$eigenvector)))
+
+# Strengths near the top of floating point put the layout out of range.
+huge <- data.frame(from = c("A", "B", "C", "C"), to = c("B", "C", "A", "D"),
+                   weight = c(1, 1e300, 2, 1e300))
+g_huge <- build_graph(huge)
+w_huge <- igraph::E(as_plain_igraph(g_huge))$weight
+check("huge strengths are scaled down and flagged",
+      isTRUE(attr(g_huge, "weights_rescaled")) && max(w_huge) <= 1e9)
+check("scaling keeps strengths in the same proportion",
+      isTRUE(all.equal(sort(w_huge / max(w_huge)),
+                       sort(c(1, 1e300, 2, 1e300) / 1e300))))
+lay_huge <- tryCatch(compute_layout(compute_metrics(g_huge)$graph),
+                     error = function(e) NULL)
+check("huge strengths still produce a finite layout",
+      !is.null(lay_huge) && all(is.finite(c(lay_huge$x, lay_huge$y))))
+check("ordinary strengths are left exactly as given",
+      !isTRUE(attr(build_graph(data.frame(from = "A", to = "B",
+                                          weight = 5000)), "weights_rescaled")))
+
+# The overlap pass runs only while the map has room for it. Above that
+# it froze the screen for seconds without separating much.
+# Three thousand people, where the pass used to take about ten seconds
+# and now does not run. At 1,500 the old code still came in under the
+# limit, so a test at that size could not tell the two apart.
+set.seed(3)
+big <- igraph::sample_pa(3000, m = 2, directed = FALSE)
+big_el <- igraph::as_edgelist(big)
+big_m <- compute_metrics(build_graph(data.frame(
+  from = paste0("P", big_el[, 1]), to = paste0("P", big_el[, 2]))))
+t_big <- system.time(lay_big <- compute_layout(big_m$graph))[["elapsed"]]
+check("a 3,000 person map lays out in a few seconds, not ten or more",
+      t_big < 5 && all(lay_big$x >= 0 & lay_big$x <= 1))
+check("the layout stays the same from run to run above capacity",
+      identical(lay_big, compute_layout(big_m$graph)))
+
+# A model name reaches a shell. The pattern refuses every shell
+# character, and the name is quoted where it is used.
+check("model names with shell characters are refused",
+      !valid_model_name("x; echo pwned") && !valid_model_name("a|b") &&
+        !valid_model_name("$(id)") && !valid_model_name("-rf") &&
+        valid_model_name("qwen2.5:7b") && valid_model_name("library/llama3.2"))
+runtime_src <- paste(readLines("R/runtime.R"), collapse = "\n")
+check("model names are quoted for the shell where they are used",
+      grepl('c("pull", shQuote(name))', runtime_src, fixed = TRUE) &&
+        grepl('c("rm", shQuote(name))', runtime_src, fixed = TRUE))
+
+# The only way data could leave the machine is a model address that
+# names another computer, so the app has to tell the two apart.
+check("loopback addresses read as this machine",
+      all(vapply(c("http://localhost:11434", "http://127.0.0.1:11434/",
+                   "http://[::1]:11434", "http://127.4.5.6"),
+                 is_local_address, logical(1))))
+check("other addresses, including look alikes, read as another machine",
+      !any(vapply(c("http://192.168.1.5:11434", "https://example.com",
+                    "http://localhost.evil.com", "http://127.0.0.1.evil.com"),
+                  is_local_address, logical(1))))
+
+# The exported script is code a reader runs, so only a method this app
+# offers is ever written into it.
+hostile <- export_script('x")); system("echo pwned"); ("', "degree")
+check("a hostile method name never reaches the exported script",
+      !grepl("system(", hostile, fixed = TRUE) &&
+        grepl("cluster_louvain(g)", hostile, fixed = TRUE))
+check("an offered method is written as chosen",
+      grepl("cluster_leiden", export_script("leiden", "degree"), fixed = TRUE))
+
+# Values the page sends are claims, not facts. A selection left over from
+# a larger network, a selection that is not a number, and an unknown
+# sort column each broke an output before.
+ok_claims <- tryCatch({
+  testServer(app, {
+    session$setInputs(dataset = "org", size_by = "degree",
+                      sort_by = "degree", label_mode = "key")
+    session$setInputs(selected_node = bundle()$metrics$n)
+    session$setInputs(dataset = "referral")
+    stopifnot(is.null(selected_index()))
+    html <- as.character(output$reading$html)
+    stopifnot(nchar(html) > 200, !grepl("About NA", html, fixed = TRUE))
+    session$setInputs(selected_node = "abc")
+    stopifnot(is.null(selected_index()), nchar(output$reading$html) > 200)
+    session$setInputs(selected_node = 3)
+    stopifnot(identical(selected_index(), 3L))
+    session$setInputs(sort_by = "nonexistent_column")
+    stopifnot(nchar(output$people_table$html) > 200)
+  })
+  TRUE
+}, error = function(e) {
+  cat("  claims error:", conditionMessage(e), "\n"); FALSE
+})
+check("stale, malformed, and unknown values from the page are absorbed",
+      ok_claims)
+
+# A file the measures cannot cope with reads as a message, never as the
+# end of the session.
+bad_file <- tempfile(fileext = ".csv")
+writeLines(c("from,to,weight", "A,B,1", "B,C,Inf", "C,D,1e308", "D,A,2"),
+           bad_file)
+ok_bad_file <- tryCatch({
+  testServer(app, {
+    session$setInputs(dataset = "upload", size_by = "degree",
+                      sort_by = "degree", label_mode = "key",
+                      edges_file = list(datapath = bad_file, name = "bad.csv",
+                                        size = file.size(bad_file),
+                                        type = "text/csv"))
+    b <- bundle()
+    stopifnot(!is.null(b), b$metrics$n == 4,
+              nchar(output$reading$html) > 200)
+  })
+  TRUE
+}, error = function(e) {
+  cat("  bad file error:", conditionMessage(e), "\n"); FALSE
+})
+check("a file of unusable strengths loads instead of ending the session",
+      ok_bad_file)
+
+# The guard itself, with a failure forced. Every input this suite has
+# found that broke the measures is now cleaned on the way in, so no file
+# reaches the guard any more, and a guard nothing reaches is a guard
+# nothing tests. Each session sources R/ afresh, so overriding a
+# function here would be undone, which is why the failure is planted in
+# a throwaway copy of the app instead.
+guard_dir <- file.path(tempfile("guard"), "app")
+dir.create(guard_dir, recursive = TRUE)
+file.copy(c("app.R", "R", "www"), guard_dir, recursive = TRUE)
+cat("\ncompute_layout <- function(...) stop(\"forced layout failure\")\n",
+    file = file.path(guard_dir, "R", "network_math.R"), append = TRUE)
+ok_guard <- tryCatch({
+  testServer(shinyAppFile(file.path(guard_dir, "app.R")), {
+    session$setInputs(dataset = "org", size_by = "degree",
+                      sort_by = "degree", label_mode = "key")
+    stopifnot(is.null(bundle()))
+    session$setInputs(dataset = "referral")
+    stopifnot(is.null(bundle()))
+  })
+  TRUE
+}, error = function(e) {
+  cat("  guard error:", conditionMessage(e), "\n"); FALSE
+})
+unlink(dirname(guard_dir), recursive = TRUE)
+check("a failure inside the measures reads as a message, not a crash",
+      ok_guard)
+
+# The grouping is the same however the session got here. Louvain breaks
+# ties at random, and the sample grouped into five communities or six
+# depending only on what had run before it.
+# The sample is built once, outside the loop, because building it sets
+# its own seed, which would hide the very randomness this checks for.
+grouping_ed <- sample_org_network()
+groups_by_state <- vapply(c(1, 99, 12345), function(seed) {
+  set.seed(seed)
+  compute_metrics(build_graph(grouping_ed))$n_groups
+}, numeric(1))
+check("the same file always yields the same groups", length(unique(groups_by_state)) == 1)
+# with_seed is checked on its own. compute_metrics as a whole does draw
+# random numbers, because igraph's eigenvector solver starts from a
+# random vector, but that draw does not change the answer.
+set.seed(777); before <- runif(1)
+set.seed(777); invisible(with_seed(42, runif(5))); after <- runif(1)
+check("fixing the grouping seed leaves the session's own randomness alone",
+      identical(before, after))
+
+# The exported scripts reproduce the numbers on screen. They are run for
+# real, on a file whose strength column is not called weight, which is
+# the case both scripts used to get wrong in different ways.
+parity_ed <- sample_org_network(); names(parity_ed)[3] <- "strength"
+parity_csv <- tempfile(fileext = ".csv")
+write.csv(parity_ed, parity_csv, row.names = FALSE)
+parity_m <- compute_metrics(build_graph(read.csv(parity_csv)))
+run_script <- function(dialect) {
+  code <- sub("your_edges.csv", parity_csv,
+              export_script("louvain", "degree", dialect), fixed = TRUE)
+  env <- new.env(parent = globalenv())
+  grDevices::pdf(NULL); on.exit(grDevices::dev.off())
+  suppressMessages(suppressWarnings(utils::capture.output(
+    eval(parse(text = code), envir = env))))
+  env
+}
+agrees <- function(name, degree, between, close, eigen, groups) {
+  i <- match(parity_m$names, name)
+  isTRUE(all(degree[i] == parity_m$degree)) &&
+    max(abs(between[i] - parity_m$betweenness)) < 1e-9 &&
+    max(abs(close[i] - parity_m$closeness)) < 1e-9 &&
+    max(abs(eigen[i] - parity_m$eigenvector)) < 1e-9 &&
+    groups == parity_m$n_groups
+}
+ok_igraph <- tryCatch({
+  g1 <- run_script("igraph")$g
+  agrees(igraph::V(g1)$name, igraph::V(g1)$degree, igraph::V(g1)$betweenness,
+         igraph::V(g1)$closeness, igraph::V(g1)$eigenvector,
+         length(unique(igraph::V(g1)$group)))
+}, error = function(e) { cat("  igraph script error:", conditionMessage(e), "\n"); FALSE })
+check("the igraph script reproduces every number on screen", ok_igraph)
+ok_tidy <- tryCatch({
+  nt <- tidygraph::as_tibble(tidygraph::activate(run_script("tidy")$g, "nodes"))
+  agrees(nt$name, nt$degree, nt$betweenness, nt$closeness, nt$eigenvector,
+         length(unique(nt$group)))
+}, error = function(e) { cat("  tidy script error:", conditionMessage(e), "\n"); FALSE })
+check("the tidy script reproduces every number on screen", ok_tidy)
+
+# The reading panel says what the numbers say. A three step path has two
+# people in between, not three; one name takes a singular verb; a list
+# with a remainder has one "and"; and no sentence leaves a double space.
+narr_ref <- compute_metrics(build_graph(sample_referral_network()))
+narr_cards <- describe_cards(narr_ref, relabel_groups(narr_ref$membership))
+narr_text <- c(vapply(narr_cards, function(cd) paste(cd$prose, collapse = " "), ""),
+               describe_network(narr_ref),
+               model_facts(narr_ref, relabel_groups(narr_ref$membership)))
+check("distance is described as steps, never as people passed through",
+      any(grepl("about 3 steps", narr_text, fixed = TRUE)) &&
+        !any(grepl("through about|runs through [0-9]", narr_text)))
+check("a single name takes a singular verb",
+      any(grepl("Theo has the most direct ties", narr_text, fixed = TRUE)) &&
+        !any(grepl("(^|\\. )[A-Z][a-z]+ have the most", narr_text)))
+check("a list with a remainder joins with one and",
+      any(grepl("Luis, and 7 more stepped away", narr_text, fixed = TRUE)) &&
+        !any(grepl("and [A-Z][a-z]+ and [0-9]+ more", narr_text)))
+check("no reading carries a double space", !any(grepl("  ", narr_text)))
+
+# Values worked out by hand on the path A, B, C, D, so the scale of each
+# measure is pinned to arithmetic rather than to another igraph call.
+# Without these the suite passed with betweenness and closeness left
+# unnormalized, which changes every number on screen.
+# Betweenness of B: of the three pairs not involving B, two (A to C and
+# A to D) pass through it, out of (n - 1)(n - 2) / 2 = 3 pairs: 2/3.
+# Harmonic closeness of A: (1 + 1/2 + 1/3) / (n - 1) = 11/18.
+hand <- compute_metrics(build_graph(data.frame(from = c("A", "B", "C"),
+                                               to = c("B", "C", "D"))))
+hb <- setNames(hand$betweenness, hand$names)
+hc <- setNames(hand$closeness, hand$names)
+check("betweenness matches the hand count on a path",
+      abs(hb[["B"]] - 2 / 3) < 1e-12 && abs(hb[["A"]]) < 1e-12)
+check("harmonic closeness matches the hand count on a path",
+      abs(hc[["A"]] - 11 / 18) < 1e-12 && abs(hc[["B"]] - 5 / 6) < 1e-12)
+
+# An interrupted runtime download. The fetch writes a megabyte and then
+# fails, with no network involved, and the folder must be empty after.
+# Every function replaced here is put back before the next check.
+ok_interrupt <- tryCatch({
+  real_root <- managed_root; real_platform <- host_platform
+  real_stream <- curl::curl_fetch_stream
+  fake_dir <- tempfile("tessera-data"); dir.create(fake_dir)
+  managed_root <<- function() fake_dir
+  host_platform <<- function() list(asset = "ollama-linux-amd64.tgz",
+                                    label = "Linux")
+  utils::assignInNamespace("curl_fetch_stream", function(url, fun, ...) {
+    fun(as.raw(rep(1, 1024 * 1024))); stop("connection reset by peer")
+  }, ns = "curl")
+  res <- managed_install()
+  left <- length(list.files(fake_dir))
+  managed_root <<- real_root; host_platform <<- real_platform
+  utils::assignInNamespace("curl_fetch_stream", real_stream, ns = "curl")
+  unlink(fake_dir, recursive = TRUE)
+  !isTRUE(res$ok) && left == 0
+}, error = function(e) {
+  cat("  interrupt error:", conditionMessage(e), "\n"); FALSE
+})
+check("an interrupted runtime download leaves nothing behind", ok_interrupt)
+
 cat("\n", pass, "passed,", fail, "failed\n")
 if (fail > 0) quit(status = 1)

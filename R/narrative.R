@@ -20,6 +20,11 @@ pct <- function(x) paste0(round(100 * x), " percent")
 # Joins names the way a sentence would, with the serial comma. Three or
 # more names is the common case in a network of any size, so the list
 # form matters more here than it looks like it should.
+# The verb for a list of names. Three names sit on paths, one name sits
+# on them, and a reader notices the difference even when they could not
+# say why the sentence felt wrong.
+verb_for <- function(x, one, many) if (length(x) == 1) one else many
+
 name_list <- function(x) {
   if (length(x) == 0) return("")
   if (length(x) == 1) return(x)
@@ -67,7 +72,7 @@ describe_network <- function(metrics) {
   )
   if (metrics$n_components == 1) {
     shape <- paste(shape,
-      sprintf("Everyone can reach everyone else, and a typical message would pass through about %s people on the way.",
+      sprintf("Everyone can reach everyone else, and a message between two people typically takes about %s steps.",
               round(metrics$mean_dist, 1)))
   } else {
     shape <- paste(shape,
@@ -90,8 +95,11 @@ describe_network <- function(metrics) {
   hubs    <- top_names(metrics$degree, metrics$names, 3)
   if (length(bridges) > 0) {
     p <- c(p, sprintf(
-      "%s sit on more of the shortest paths between other people than anyone else, which suggests they carry much of the traffic between groups. %s have the most direct ties, which makes them the busiest points of contact day to day. These readings describe position in this snapshot, not performance.",
-      name_list(bridges), name_list(hubs)
+      "%s %s on more of the shortest paths between other people than anyone else, which suggests %s much of the traffic between groups. %s %s the most direct ties, which makes %s the busiest %s of contact day to day. These readings describe position in this snapshot, not performance.",
+      name_list(bridges), verb_for(bridges, "sits", "sit"),
+      verb_for(bridges, "this person carries", "they carry"),
+      name_list(hubs), verb_for(hubs, "has", "have"),
+      verb_for(hubs, "this person", "them"), verb_for(hubs, "point", "points")
     ))
   }
 
@@ -99,10 +107,12 @@ describe_network <- function(metrics) {
   if (length(metrics$cut_ids) > 0) {
     shown <- head(sort(metrics$cut_ids), 4)
     more  <- length(metrics$cut_ids) - length(shown)
-    tail_note <- if (more > 0) sprintf(" and %d more", more) else ""
+    # The count of the rest is the last item of the list rather than a
+    # second "and" after it.
+    listed <- if (more > 0) c(shown, sprintf("%d more", more)) else shown
     p <- c(p, sprintf(
-      "If %s%s stepped away, parts of this network would lose their only connection to the rest. Positions like these are worth a closer look: they can signal either a person quietly holding things together or a process that depends too much on one desk.",
-      name_list(shown), tail_note
+      "If %s stepped away, parts of this network would lose their only connection to the rest. Positions like these are worth a closer look: they can signal either a person quietly holding things together or a process that depends too much on one desk.",
+      name_list(listed)
     ))
   } else {
     p <- c(p, "No single person is the only link between parts of this network. If any one person stepped away, everyone else could still reach each other another way.")
@@ -184,7 +194,7 @@ model_facts <- function(metrics, groups) {
     sprintf("Density: %s of all possible ties are present.",
             pct(m$density)),
     if (m$n_components == 1) {
-      sprintf("The network is in one piece. A typical path runs through %.1f people.",
+      sprintf("The network is in one piece. A typical path between two people is %.1f steps long.",
               m$mean_dist)
     } else {
       sprintf("The network is in %d separate pieces. The largest holds %s of everyone.",
@@ -249,7 +259,10 @@ describe_cards <- function(metrics, groups) {
   cards <- list()
 
   connected_line <- if (metrics$n_components == 1) {
-    sprintf("Everyone can reach everyone else. A typical message passes through about %s people on the way.",
+    # The mean distance counts steps, not the people passed on the way.
+    # A three step path has only two people in between, so the earlier
+    # wording overstated it by one.
+    sprintf("Everyone can reach everyone else. A message between two people typically takes about %s steps.",
             round(metrics$mean_dist, 1))
   } else {
     sprintf("The network is in %d separate pieces. The largest holds %s of the people; the rest cannot reach it at all in this data.",
@@ -292,14 +305,20 @@ describe_cards <- function(metrics, groups) {
   bridges <- top_names(metrics$betweenness, metrics$names, 3)
   hubs    <- setdiff(top_names(metrics$degree, metrics$names, 3), bridges)
   holders_prose <- if (length(bridges) > 0) {
-    paste(
-      sprintf("%s sit on more of the shortest paths between other people than anyone else, which suggests they carry much of the traffic between groups.",
-              name_list(bridges)),
+    # Built as a vector and joined once, so a missing middle sentence
+    # leaves no double space behind it.
+    paste(c(
+      sprintf("%s %s on more of the shortest paths between other people than anyone else, which suggests %s much of the traffic between groups.",
+              name_list(bridges), verb_for(bridges, "sits", "sit"),
+              verb_for(bridges, "this person carries", "they carry")),
       if (length(hubs) > 0) {
-        sprintf("%s have the most direct ties and make the busiest day to day contacts.",
-                name_list(hubs))
-      } else "",
-      "These readings describe position in this snapshot, not performance.")
+        sprintf("%s %s the most direct ties and %s the busiest day to day %s.",
+                name_list(hubs), verb_for(hubs, "has", "have"),
+                verb_for(hubs, "makes", "make"),
+                verb_for(hubs, "contact", "contacts"))
+      },
+      "These readings describe position in this snapshot, not performance."),
+      collapse = " ")
   } else {
     "No one stands between others often enough to name. Ties spread evenly here."
   }
@@ -315,9 +334,9 @@ describe_cards <- function(metrics, groups) {
   more <- length(metrics$cut_ids) - length(fragile_people)
   fragile_prose <- if (length(metrics$cut_ids) > 0) {
     paste0(
-      sprintf("If %s%s stepped away, parts of this network would lose their only connection to the rest.",
-              name_list(fragile_people),
-              if (more > 0) sprintf(" and %d more", more) else ""),
+      sprintf("If %s stepped away, parts of this network would lose their only connection to the rest.",
+              name_list(if (more > 0) c(fragile_people, sprintf("%d more", more))
+                        else fragile_people)),
       " Positions like these can signal a person quietly holding things",
       " together, or a process that depends too much on one desk.")
   } else {

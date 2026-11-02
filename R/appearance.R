@@ -54,4 +54,26 @@ swatch_label <- function(text, palette_name, note = NULL) {
     palette_swatch(figure_palettes[[palette_name]]))
 }
 
-# The shared brand mark, reused in the navbar title.
+
+# The appearance toggle, which lives in the Settings dialog. It sits in
+# this file rather than app.R so the theme suite can render the same
+# button the dialog shows. The click handler is attached inline so the
+# button works from the moment it exists, with no dependency on script
+# load order, event delegation, or custom element registration. It flips
+# the attribute the stylesheet reads, updates its own label, and tells
+# the server so downloads follow the same mode.
+theme_toggle_button <- function() {
+  handler <- paste0(
+    "var r = document.documentElement;",
+    "var next = r.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';",
+    "r.setAttribute('data-bs-theme', next);",
+    "this.textContent = next === 'dark' ? 'Light mode' : 'Dark mode';",
+    "this.setAttribute('aria-label', next === 'dark' ? ",
+    "'Switch to light mode' : 'Switch to dark mode');",
+    "try { window.localStorage.setItem('tessera-theme', next); } catch (e) {}",
+    "if (window.Shiny) { Shiny.setInputValue('theme_mode', next); }")
+  tags$button(type = "button", class = "btn theme-toggle",
+              onclick = HTML(handler),
+              `aria-label` = "Switch to light mode",
+              "Light mode")
+}

@@ -92,16 +92,15 @@ a reconstruction of it. The appearance toggle:
 
 ```sh
 # with the app running on port 7823
+Rscript tests/render_controls.R /tmp/controls.html /tmp/toggle.html
 curl -s http://127.0.0.1:7823/ -o /tmp/page.html
 curl -s http://127.0.0.1:7823/styles.css -o /tmp/styles.css
-node tests/theme_test.mjs /tmp/page.html /tmp/styles.css
+node tests/theme_test.mjs /tmp/page.html /tmp/styles.css /tmp/toggle.html
 ```
 
-And full screen, which needs the rendered control row alongside the page:
+And full screen, which uses the control row written by the step above:
 
 ```sh
-Rscript tests/render_controls.R /tmp/controls.html
-curl -s http://127.0.0.1:7823/ -o /tmp/page.html
 curl -s "http://127.0.0.1:7823/graph.js" -o /tmp/graph.js
 node tests/fullscreen_test.mjs /tmp/page.html /tmp/graph.js /tmp/controls.html
 ```

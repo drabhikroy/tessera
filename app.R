@@ -89,30 +89,6 @@ label_choices <- c(
   "No names"   = "none"
 )
 
-# Legend chips are tiny inline SVGs so the shapes in the key match the
-# shapes on the map exactly, in every palette. Each chip is a button:
-# choosing one lights only that group.
-# The appearance toggle. The click handler is attached inline so the
-# button works from the moment it exists, with no dependency on script
-# load order, event delegation, or custom element registration. It flips
-# the attribute the stylesheet reads, updates its own label, and tells
-# the server so downloads follow the same mode.
-theme_toggle_button <- function() {
-  handler <- paste0(
-    "var r = document.documentElement;",
-    "var next = r.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';",
-    "r.setAttribute('data-bs-theme', next);",
-    "this.textContent = next === 'dark' ? 'Light mode' : 'Dark mode';",
-    "this.setAttribute('aria-label', next === 'dark' ? ",
-    "'Switch to light mode' : 'Switch to dark mode');",
-    "try { window.localStorage.setItem('tessera-theme', next); } catch (e) {}",
-    "if (window.Shiny) { Shiny.setInputValue('theme_mode', next); }")
-  tags$button(type = "button", class = "btn theme-toggle",
-              onclick = HTML(handler),
-              `aria-label` = "Switch to light mode",
-              "Light mode")
-}
-
 # The glyph for a group number. Twelve shapes cycle first, then three
 # fill variants, which gives thirty six groups that stay apart from one
 # another without hue being asked to carry any of it. Color repeats
@@ -185,6 +161,7 @@ legend_chip <- function(group, size) {
     group, size)
 }
 
+# The shared brand mark, reused in the navbar title.
 brand_title <- div(class = "brand",
   HTML(paste0('<svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">',
     # Four tiles set together, a small mosaic: the app's namesake.
@@ -486,11 +463,32 @@ server <- function(input, output, session) {
                        type = "error", duration = 8)
       return(NULL)
     }
-    metrics <- compute_metrics(g)
-    layout  <- compute_layout(metrics$graph)
-    payload <- graph_payload(metrics, layout)
-    list(metrics = metrics, payload = payload,
-         groups = payload$nodes$group)
+    if (isTRUE(attr(g, "weights_rescaled"))) {
+      showNotification(paste(
+        "Some tie strengths were larger than a billion, so every strength",
+        "was scaled down by the same factor. The groups and the measures",
+        "are unchanged, since they read strengths relative to one another,",
+        "though people may sit in different places on the map."),
+        type = "warning", duration = 10)
+    }
+    # An error here ran inside the observer that sends the map, and an
+    # observer that errors ends the whole session, so one bad file used
+    # to take the app down. Any failure now reads as a message instead.
+    built <- tryCatch({
+      metrics <- compute_metrics(g)
+      layout  <- compute_layout(metrics$graph)
+      payload <- graph_payload(metrics, layout)
+      list(metrics = metrics, payload = payload,
+           groups = payload$nodes$group)
+    }, error = function(e) {
+      showNotification(paste(
+        "This network could not be measured, so nothing was put on the",
+        "map. The file may hold values the measures cannot work with.",
+        "Details:", conditionMessage(e)),
+        type = "error", duration = 12)
+      NULL
+    })
+    built
   })
 
   # The browser gets the whole graph once per dataset, converted to row
@@ -542,6 +540,21 @@ server <- function(input, output, session) {
     req(b)
     id <- b$payload$nodes |> filter(label == input$chip_person) |> pull(id)
     if (length(id) == 1) session$sendCustomMessage("select-node", id)
+  })
+
+  # The selected person as a row of the current network, or NULL. The
+  # browser clears its selection when a new network arrives, but the
+  # server can render once before that message lands, holding an id from
+  # the previous network that may not exist in this one. A value the
+  # page sends is also only a claim, so it is checked rather than
+  # trusted. Every reader of the selection goes through here.
+  selected_index <- reactive({
+    b <- bundle()
+    sel <- input$selected_node
+    if (is.null(b) || is.null(sel) || length(sel) != 1) return(NULL)
+    idx <- suppressWarnings(as.integer(sel))
+    if (is.na(idx) || idx < 1 || idx > b$metrics$n) return(NULL)
+    idx
   })
 
   # The file input is rendered rather than fixed so that a reset can
@@ -801,8 +814,8 @@ server <- function(input, output, session) {
                      "plain English: its shape, its groups, who holds it",
                      "together, and where it is fragile."))))
     }
-    sel <- input$selected_node
-    if (is.null(sel) || length(sel) == 0 || is.na(sel)) {
+    idx <- selected_index()
+    if (is.null(idx)) {
       cards <- describe_cards(b$metrics, b$groups)
       tagList(
         lapply(cards, card_ui),
@@ -814,7 +827,6 @@ server <- function(input, output, session) {
         )
       )
     } else {
-      idx <- as.integer(sel)
       tagList(
         card_ui(person_card(b$metrics, idx, b$groups)),
         div(class = "card slim",
@@ -870,14 +882,14 @@ server <- function(input, output, session) {
         ". Change the model name in Settings, or download this one.")))
       return(NULL)
     }
-    sel <- input$selected_node
+    idx <- selected_index()
     # Findings only, not the panel prose. The panel explains the app as
     # well as the network, and a model handed a definition restates it
     # as though it were a discovery.
-    paras <- if (is.null(sel) || length(sel) == 0 || is.na(sel)) {
+    paras <- if (is.null(idx)) {
       model_facts(b$metrics, b$groups)
     } else {
-      model_facts_person(b$metrics, as.integer(sel), b$groups)
+      model_facts_person(b$metrics, idx, b$groups)
     }
     withProgress(message = "Asking the local model", value = 0.4, {
       res <- rewrite_with_local_model(
@@ -1958,7 +1970,7 @@ server <- function(input, output, session) {
         min_weight = as.character(input$min_weight %||% 1),
         palette = input$palette %||% "standard",
         community_method = input$community_method %||% "louvain",
-        selected = as.character(input$selected_node %||% "")
+        selected = as.character(selected_index() %||% "")
       )
       save_session(file, session_snapshot(ed, view))
     })
@@ -2035,6 +2047,13 @@ server <- function(input, output, session) {
   observeEvent(input$ollama_url, {
     pref_url(input$ollama_url)
     write_prefs(list(ollama_url = input$ollama_url))
+    if (!is_local_address(input$ollama_url)) {
+      showNotification(paste(
+        "That address is another computer, not this one. When you ask the",
+        "model to restate a reading, the network facts will be sent there.",
+        "Use localhost to keep everything on this machine."),
+        type = "warning", duration = 12)
+    }
   }, ignoreInit = TRUE)
   observeEvent(input$ollama_model, {
     pref_model(input$ollama_model)
@@ -2098,7 +2117,10 @@ server <- function(input, output, session) {
   output$people_table <- renderUI({
     b <- bundle()
     req(b)
+    # The page can send any string, so an unknown column falls back to
+    # the default rather than breaking the table.
     key <- input$sort_by %||% "degree"
+    if (!key %in% sort_choices) key <- "degree"
     nd <- b$payload$nodes |>
       arrange(if (key == "label") label else desc(.data[[key]]))
     # A bar behind the column the table is sorted by. Fifty eight rows of

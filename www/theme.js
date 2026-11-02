@@ -137,13 +137,28 @@
     try { saved = window.localStorage.getItem("tessera-theme"); } catch (e) {}
     var mode = saved === "light" || saved === "dark" ? saved : "dark";
     document.documentElement.setAttribute("data-bs-theme", mode);
-    var btn = document.querySelector(".theme-toggle");
-    if (btn) {
-      btn.textContent = mode === "dark" ? "Light mode" : "Dark mode";
-      btn.setAttribute("aria-label", mode === "dark" ?
-        "Switch to light mode" : "Switch to dark mode");
-    }
+    syncToggleLabel();
   }
+
+  /* The toggle lives in the Settings dialog, which the server builds
+     fresh each time it opens, with the light mode label baked in. In
+     light mode that label named the mode already on screen. The label
+     is set from the page itself instead, each time a dialog opens, so it
+     always names the mode one press will switch to. */
+  function syncToggleLabel() {
+    var mode = document.documentElement.getAttribute("data-bs-theme");
+    var dark = mode !== "light";
+    document.querySelectorAll(".theme-toggle").forEach(function (btn) {
+      btn.textContent = dark ? "Light mode" : "Dark mode";
+      btn.setAttribute("aria-label", dark ?
+        "Switch to light mode" : "Switch to dark mode");
+    });
+  }
+  /* Bootstrap fires show before the dialog is visible, so the label is
+     right on the first frame rather than corrected after it. */
+  document.addEventListener("show.bs.modal", syncToggleLabel);
+  document.addEventListener("shown.bs.modal", syncToggleLabel);
+  window.TesseraTheme = { syncToggleLabel: syncToggleLabel };
 
   function ready() {
     restoreTheme();

@@ -23,18 +23,18 @@ fragile.](docs/screenshot-operator.png)
 
 Tessera supports two audiences from one screen:
 
-- **Overview** — explains what the app does, shows a worked example, and
+- **Overview** explains what the app does, shows a worked example, and
   gives the shape of the file it expects, before or after data is loaded
-- **Explore** — a no-code view: interactive network map, plain-language
+- **Explore** is a no-code view: interactive network map, plain-language
   reading panel, people table, and group and relationship exploration
-- **Research** — detailed statistics for readers who want to inspect the
+- **Research** holds detailed statistics for readers who want to inspect the
   analysis: extended centralities (degree, strength, betweenness, harmonic
   closeness, eigenvector, PageRank, HITS), community detection (Louvain,
   Leiden, Walktrap, fast greedy, Girvan-Newman), global diagnostics
   (density, transitivity, reciprocity, components, diameter, mean
   distance, mean degree), dyad and triad census, and a runnable igraph
   script that reproduces the analysis outside the app
-- **Statistics** — tests whether what the other tabs describe is more
+- **Statistics** tests whether what the other tabs describe is more
   than network size and density alone would produce, using conditional
   uniform graph tests and a permutation test for group crossing (see
   [How it works](#how-it-works))
@@ -204,7 +204,9 @@ control cycles through three distances for a map that came out too
 dense to read or too sparse to see. One control returns the map to the
 layout the server computed, which knows about the communities and
 separates overlapping people in a way a few hundred frames of physics
-will not find.
+will not find. Past about 800 people there is no room left at that
+spacing, so the separation step is skipped rather than left to spend
+seconds failing at it.
 
 The forces are scaled by a temperature that falls each frame, so the
 map arranges itself and then stops. Friction alone does not settle a

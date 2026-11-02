@@ -8,12 +8,19 @@
 # inputs the app would have once a network is loaded. CONTRIBUTING.md
 # documents the same call for running the suite by hand.
 #
-# Usage: Rscript tests/render_controls.R <output.html>
+# The appearance toggle lives in the Settings dialog, which the server
+# builds only when it is opened, so it is not in any page a test can
+# fetch. When a second path is given, the same button the dialog shows
+# is written there for the theme suite.
+#
+# Usage: Rscript tests/render_controls.R <output.html> [toggle.html]
 
 suppressPackageStartupMessages(library(shiny))
 
-out <- commandArgs(trailingOnly = TRUE)[1]
+args <- commandArgs(trailingOnly = TRUE)
+out <- args[1]
 if (is.na(out)) stop("Give an output path")
+toggle_out <- args[2]
 
 testServer(shinyAppFile("app.R"), {
   # These are the inputs present once a sample network is chosen. The
@@ -29,3 +36,9 @@ testServer(shinyAppFile("app.R"), {
 })
 
 cat("wrote", out, "\n")
+
+if (!is.na(toggle_out)) {
+  source("R/appearance.R")
+  writeLines(as.character(theme_toggle_button()), toggle_out)
+  cat("wrote", toggle_out, "\n")
+}

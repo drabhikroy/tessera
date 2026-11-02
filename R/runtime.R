@@ -120,6 +120,22 @@ machine_report <- function() {
 # Is a server answering at this address, and what does it hold. The
 # check is a plain request for the model list, which is the cheapest
 # thing an Ollama server will answer.
+# Whether a server address points at this machine. The app promises
+# that nothing leaves the computer, and the only way anything could is a
+# model address that names another one. That can be deliberate, such as
+# a model server elsewhere on a home network, so it is allowed, but it is
+# said out loud rather than happening quietly.
+is_local_address <- function(url) {
+  if (!is.character(url) || length(url) != 1 || !nzchar(url)) return(TRUE)
+  host <- sub("^[A-Za-z][A-Za-z0-9+.-]*://", "", url)
+  host <- sub("[/?#].*$", "", host)
+  host <- sub("^.*@", "", host)
+  host <- if (startsWith(host, "[")) sub("^\\[([^]]*)\\].*$", "\\1", host) else sub(":[0-9]*$", "", host)
+  host <- tolower(host)
+  host %in% c("localhost", "::1", "0:0:0:0:0:0:0:1") ||
+    grepl("^127(\\.[0-9]{1,3}){3}$", host) || grepl("\\.localhost$", host)
+}
+
 ollama_status <- function(base_url = "http://localhost:11434") {
   if (!requireNamespace("curl", quietly = TRUE)) {
     return(list(running = FALSE, models = character(0),
@@ -239,6 +255,10 @@ managed_install <- function(report = function(text) invisible(NULL)) {
     Sys.chmod(binary, "0755")
     list(ok = TRUE, message = paste("The runtime is installed at", root))
   }, error = function(e) {
+    # A download cut off partway leaves up to half a gigabyte behind,
+    # in a folder the reader never sees. It is useless without the rest,
+    # so it goes.
+    unlink(archive)
     list(ok = FALSE, message = paste(
       "The download did not finish:", conditionMessage(e),
       "The guided route is always available as a fallback."))
@@ -292,11 +312,15 @@ managed_start <- function(base_url = "http://localhost:11434",
 # Downloads one model through whichever binary is present. This is a
 # fetch into the runtime's own store rather than a system install, which
 # is why it can be offered on both routes.
-# A model name is handed to another program as an argument. system2()
-# passes arguments without a shell, so there is no shell to inject into,
-# but a name beginning with a dash would still arrive as an option
-# rather than as a name. The shape a model name is allowed to have is
-# narrow and well known, so it is checked rather than trusted.
+# A model name is handed to another program as an argument. On macOS
+# and Linux system2() joins its arguments into one line and gives it to
+# the shell unquoted, so a name holding a semicolon would run as a
+# second command. Two defenses stand here, and either alone would be
+# enough. The shape a model name may have is narrow and well known, so
+# it is checked rather than trusted, which also stops a name beginning
+# with a dash from arriving as an option. And the name is quoted for the
+# shell where it is used, so loosening this pattern later cannot quietly
+# open a way in.
 valid_model_name <- function(name) {
   is.character(name) && length(name) == 1 && nzchar(name) &&
     nchar(name) <= 128 &&
@@ -318,7 +342,8 @@ pull_model <- function(name, report = function(text) invisible(NULL)) {
   }
   tryCatch({
     report(paste("Downloading", name, "through the runtime."))
-    code <- system2(binary, c("pull", name), stdout = TRUE, stderr = TRUE)
+    code <- system2(binary, c("pull", shQuote(name)), stdout = TRUE,
+                    stderr = TRUE)
     status <- attr(code, "status")
     if (!is.null(status) && status != 0) {
       stop(paste(utils::tail(code, 3), collapse = " "))
@@ -343,7 +368,8 @@ remove_model <- function(name) {
     return(list(ok = FALSE, message = "No runtime is installed."))
   }
   tryCatch({
-    out <- system2(binary, c("rm", name), stdout = TRUE, stderr = TRUE)
+    out <- system2(binary, c("rm", shQuote(name)), stdout = TRUE,
+                    stderr = TRUE)
     status <- attr(out, "status")
     if (!is.null(status) && status != 0) {
       stop(paste(utils::tail(out, 2), collapse = " "))

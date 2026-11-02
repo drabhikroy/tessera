@@ -4,13 +4,20 @@
 // hand built copy of the markup and passed while the running app failed,
 // so this file starts from the served HTML and the served stylesheet.
 //
-// Usage: node tests/theme_test.mjs <page.html> <styles.css>
+// Usage: node tests/theme_test.mjs <page.html> <styles.css> <toggle.html>
+//
+// The toggle has lived in the Settings dialog since 0.21.0, so it is not
+// in the served page. The third file is the button that dialog shows,
+// written by tests/render_controls.R from the same function the app
+// calls. Before this argument existed the suite found no button, failed
+// two checks, and quietly skipped every check that pressed it.
 
 import { JSDOM } from "jsdom";
 import { readFileSync } from "fs";
 
 const pageFile = process.argv[2];
 const cssFile = process.argv[3];
+const toggleFile = process.argv[4];
 const html = readFileSync(pageFile, "utf8");
 const css = readFileSync(cssFile, "utf8");
 
@@ -80,10 +87,18 @@ const stamped = [...doc.querySelectorAll("link[rel=stylesheet], script[src]")]
 check("the app's own assets are version stamped",
   stamped.length === 3 && stamped.every((u) => u.includes("?v=")));
 
-// The toggle must exist in the served markup and carry its own handler,
-// so it cannot be broken by script load order.
+// The toggle is put into the page the way opening Settings puts it
+// there. A missing file is a failure, not a reason to skip the checks
+// below, since a skipped check is how this suite went quiet before.
+check("the toggle markup was given to the suite", !!toggleFile);
+if (toggleFile) {
+  const dialog = doc.createElement("div");
+  dialog.className = "modal";
+  dialog.innerHTML = readFileSync(toggleFile, "utf8");
+  doc.body.appendChild(dialog);
+}
 const btn = doc.querySelector(".theme-toggle");
-check("the appearance toggle is present in the served page", !!btn);
+check("the appearance toggle renders from the app's own function", !!btn);
 check("the toggle carries an inline handler",
   !!btn && !!btn.getAttribute("onclick"));
 
@@ -112,6 +127,27 @@ if (btn) {
 
   check("the choice is remembered for the next visit",
     window.localStorage.getItem("tessera-theme") === start);
+}
+
+// Reopening Settings in light mode. The server rebuilds the button with
+// the light mode label each time the dialog opens, so without a sync the
+// label named the mode already on screen. theme.js listens for the
+// dialog opening and sets the label from the page.
+if (toggleFile) {
+  window.eval(readFileSync(new URL("../www/theme.js", import.meta.url), "utf8"));
+  doc.documentElement.setAttribute("data-bs-theme", "light");
+  doc.querySelectorAll(".modal").forEach((m) => m.remove());
+  const reopened = doc.createElement("div");
+  reopened.className = "modal";
+  reopened.innerHTML = readFileSync(toggleFile, "utf8");
+  doc.body.appendChild(reopened);
+  const fresh = reopened.querySelector(".theme-toggle");
+  check("a freshly built button starts with the server label",
+    fresh.textContent === "Light mode");
+  reopened.dispatchEvent(new window.Event("show.bs.modal", { bubbles: true }));
+  check("reopening Settings in light mode labels the button Dark mode",
+    fresh.textContent === "Dark mode" &&
+    fresh.getAttribute("aria-label") === "Switch to dark mode");
 }
 
 console.log("\n" + pass + " passed, " + fail + " failed");
