@@ -1377,7 +1377,13 @@ check("harmonic closeness matches the hand count on a path",
 
 # An interrupted runtime download. The fetch writes a megabyte and then
 # fails, with no network involved, and the folder must be empty after.
-# Every function replaced here is put back before the next check.
+# Every function replaced here is put back before the next check. The
+# curl package is optional for the app but required here, because this
+# check replaces one of its functions, so a missing install is said
+# plainly rather than left to read as a fault in the download code.
+if (!requireNamespace("curl", quietly = TRUE)) {
+  cat("  the curl package is needed for this check: install.packages(\"curl\")\n")
+}
 ok_interrupt <- tryCatch({
   real_root <- managed_root; real_platform <- host_platform
   real_stream <- curl::curl_fetch_stream

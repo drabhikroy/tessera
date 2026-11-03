@@ -54,6 +54,9 @@ jobs:
         with:
           r-version: release
 
+      # The curl package is optional for a reader, since only the managed
+      # model download uses it, but the R suite replaces its fetch function
+      # to test an interrupted download, so the suite needs it installed.
       - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
         with:
           packages: |
@@ -69,6 +72,7 @@ jobs:
             any::tibble
             any::readr
             any::jsonlite
+            any::curl
 
       - name: Graph math, prose, contrast, and research tier
         run: Rscript tests/run_tests.R
