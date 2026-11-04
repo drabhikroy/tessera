@@ -1,3 +1,70 @@
+# Tessera 0.25.1
+
+A repair round. Every fix below came from reading the app against what
+its own pages claim, running the claim, and keeping the cases that
+failed. Nothing here adds a feature.
+
+## Fixed
+
+- A model name typed into the Local models screen reached the system
+  shell without quotes, so a name containing a semicolon ran whatever
+  followed it with the permissions of the person running the app. Names
+  are now checked first and quoted every time they are passed on.
+- A tie strength of infinity ended the session, and strengths past about
+  a billion put the force layout out of floating point range. Infinity
+  is now treated like any other unusable strength. Very large strengths
+  are scaled down together by one factor and the screen says so. Groups
+  and measures do not change, since they read strengths relative to one
+  another, though people may sit in different places on the map.
+- The step that separates overlapping people froze the app for seconds
+  on large networks. It now buckets people by position, and past about
+  800 people it is skipped, since no room is left at that spacing. A
+  network of 4,000 people lays out in about half a second where it took
+  about seventeen.
+- The same file could produce different groups on different runs. The
+  grouping now starts from a fixed seed and puts the random state back
+  as it found it.
+- The exported scripts did not reproduce what the app showed. They now
+  name the weight column wherever it sits, count distances in steps, and
+  set a seed, and a test runs both script styles and compares every
+  number.
+- A method name that was not on the list could be written into an
+  exported script, a person number or sort order left over from an
+  earlier screen could break the reading panel, and a file that failed
+  to compute ended the session. Each is now checked, and a failure is
+  reported on screen instead.
+- The model address field now warns when the address is not on this
+  computer, since the summary it sends would leave the machine.
+- A runtime download that stopped partway left a partial archive in the
+  app folder. It is now removed.
+- Reopening Settings in light mode labeled the appearance button with
+  the mode already on screen. The label is now set from the page each
+  time the dialog opens.
+- The reading said a typical message passes through some number of
+  people on the way, but the figure counts steps, and a path of three
+  steps has only two people in between, so the sentence overstated it by
+  one. It also used plural verbs when a single person held a position.
+  The wording and the agreement are corrected.
+
+## Tests and project
+
+- The appearance suite had been finding no button and skipping every
+  check that pressed it. It now builds the button from the app's own
+  function and fails if it is missing.
+- The R suite grew from 98 to 126 checks, including hand counts of
+  betweenness and harmonic closeness on a small path, which the earlier
+  suite could not have noticed going wrong.
+- The workflow actions are pinned to full commits, and a pushed version
+  tag now creates a draft release to be published by hand.
+
+## Known limits
+
+- A network of several thousand people can still hold the session for
+  tens of seconds while betweenness is computed. At 10,000 people the
+  whole load takes about half a minute.
+- The managed model download is not checked against a published
+  checksum.
+
 # Tessera 0.25.0
 
 A correctness round. The Statistics tab was
